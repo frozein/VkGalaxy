@@ -3,14 +3,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 cmake_policy(SET CMP0091 NEW)
-project(learnvulkan VERSION 1.0)
+project(vulkancraft VERSION 1.0)
 
 # find source files:
-file(GLOB_RECURSE learnvulkan_src CONFIGURE_DEPENDS "src/*.cpp")
-add_executable(${PROJECT_NAME} ${learnvulkan_src})
+file(GLOB_RECURSE vulkancraft_src CONFIGURE_DEPENDS "src/*.cpp")
+add_executable(${PROJECT_NAME} ${vulkancraft_src})
 
 # find include diretories and libraries
 find_package(GLFW3 3.3 REQUIRED)
+find_package(Vulkan REQUIRED)
 
 include_directories("src/" ${Vulkan_INCLUDE_DIRS})
 
