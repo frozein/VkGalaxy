@@ -43,7 +43,17 @@ void render_quit(RenderInstance* instance);
 
 void render_resize_swapchain(RenderInstance* instance, uint32 w, uint32 h);
 
+VkImage render_create_image(RenderInstance* instance, uint32 w, uint32 h, uint32 mipLevels, VkSampleCountFlagBits samples, 
+	VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory* memory);
+void render_destroy_image(RenderInstance* instance, VkImage image, VkDeviceMemory memory);
+
 VkImageView render_create_image_view(RenderInstance* instance, VkImage image, VkFormat format, VkImageAspectFlags aspects, uint32 mipLevels);
 void render_destroy_image_view(RenderInstance* instance, VkImageView view);
+
+uint32* render_load_spirv(const char* path, uint64* size);
+void render_free_spirv(uint32* code);
+
+VkShaderModule render_create_shader_module(RenderInstance* instance, uint64 codeSize, uint32* code);
+void render_destroy_shader_module(RenderInstance* instance, VkShaderModule module);
 
 #endif

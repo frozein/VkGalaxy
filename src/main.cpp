@@ -1,18 +1,18 @@
 #include <iostream>
-#include "render.hpp"
+#include "game_draw.hpp"
 
 int main()
 {
-	RenderInstance* render;
-	if(!render_init(&render, 1920, 1080, "VulkanCraft"))
+	DrawState* state;
+	if(!gamedraw_init(&state))
 		return -1;
 
-	while(!glfwWindowShouldClose(render->window))
+	while(!glfwWindowShouldClose(state->instance->window))
 	{
 		glfwPollEvents();
 	}
 
-	render_quit(render);
+	gamedraw_quit(state);
 
 	return 0;
 }

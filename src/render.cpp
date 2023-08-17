@@ -21,6 +21,10 @@ static void _render_destroy_swapchain(RenderInstance* instance);
 
 //----------------------------------------------------------------------------//
 
+static uint32 _render_find_memory_type(RenderInstance* instance, uint32 typeFilter, VkMemoryPropertyFlags properties);
+
+//----------------------------------------------------------------------------//
+
 static VKAPI_ATTR VkBool32 _render_vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT sevrerity,
 	VkDebugUtilsMessageTypeFlagsEXT type,
@@ -96,6 +100,55 @@ void render_resize_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 
 //----------------------------------------------------------------------------//
 
+VkImage render_create_image(RenderInstance* inst, uint32 w, uint32 h, uint32 mipLevels, VkSampleCountFlagBits samples, 
+	VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory* memory)
+{
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.extent.width = w;
+	imageInfo.extent.height = h;
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = mipLevels;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = format;
+	imageInfo.tiling = tiling;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.usage = usage;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; //TODO: allow this to be specified, not sure if we'd ever want a concurrently shared image
+	imageInfo.samples = samples;
+
+	VkImage image;
+	if(vkCreateImage(inst->device, &imageInfo, NULL, &image) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create image");
+		return image;
+	}
+
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(inst->device, image, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = _render_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
+
+	if(vkAllocateMemory(inst->device, &allocInfo, NULL, memory) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to allocate device memory for image");
+		return image;
+	}
+
+	vkBindImageMemory(inst->device, image, *memory, 0);
+	return image;
+}
+
+void render_destroy_image(RenderInstance* inst, VkImage image, VkDeviceMemory memory)
+{
+	vkFreeMemory(inst->device, memory, NULL);
+	vkDestroyImage(inst->device, image, NULL);
+}
+
 VkImageView render_create_image_view(RenderInstance* inst, VkImage image, VkFormat format, VkImageAspectFlags aspects, uint32 mipLevels)
 {
 	VkImageViewCreateInfo viewInfo = {};
@@ -119,6 +172,52 @@ VkImageView render_create_image_view(RenderInstance* inst, VkImage image, VkForm
 void render_destroy_image_view(RenderInstance* inst, VkImageView view)
 {
 	vkDestroyImageView(inst->device, view, NULL);
+}
+
+uint32* render_load_spirv(const char* path, uint64* size)
+{
+	FILE* fptr = fopen(path, "rb");
+	if(!fptr)
+	{
+		ERROR_LOG("failed to open spirv file");
+		return NULL;
+	}
+
+	fseek(fptr, 0, SEEK_END);
+	*size = ftell(fptr) / sizeof(uint32);
+
+	fseek(fptr, 0, SEEK_SET);
+	uint32* code = (uint32*)malloc(*size);
+	fread(code, sizeof(uint32), *size, fptr);
+
+	fclose(fptr);
+}
+
+void render_free_spirv(uint32* code)
+{
+	free(code);
+}
+
+VkShaderModule render_create_shader_module(RenderInstance* inst, uint64 codeSize, uint32* code)
+{
+	VkShaderModuleCreateInfo moduleInfo = {};
+	moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	moduleInfo.codeSize = codeSize;
+	moduleInfo.pCode = code;
+
+	VkShaderModule module;
+	if(vkCreateShaderModule(inst->device, &moduleInfo, NULL, &module) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create shader module");
+		return module;
+	}
+
+	return module;
+}
+
+void render_destroy_shader_module(RenderInstance* inst, VkShaderModule module)
+{
+	vkDestroyShaderModule(inst->device, module, NULL);
 }
 
 //----------------------------------------------------------------------------//
@@ -659,6 +758,21 @@ static void _render_destroy_swapchain(RenderInstance* inst)
 	free(inst->swapchainImageViews);
 
 	vkDestroySwapchainKHR(inst->device, inst->swapchain, NULL);
+}
+
+//----------------------------------------------------------------------------//
+
+static uint32 _render_find_memory_type(RenderInstance* inst, uint32 typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(inst->physicalDevice, &memProperties);
+
+	for(int32 i = 0; i < memProperties.memoryTypeCount; i++)
+		if((typeFilter & (1 << i)) && ((memProperties.memoryTypes[i].propertyFlags & properties) == properties))
+			return i;
+	
+	ERROR_LOG("failed to find a suitable memory type");
+	return UINT32_MAX;
 }
 
 //----------------------------------------------------------------------------//
