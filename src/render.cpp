@@ -19,7 +19,13 @@ static void _render_destroy_vk_device(RenderInstance* instance);
 static bool _render_create_swapchain(RenderInstance* instance, uint32 w, uint32 h);
 static void _render_destroy_swapchain(RenderInstance* instance);
 
+static bool _render_create_command_pool(RenderInstance* instance);
+static void _render_destroy_command_pool(RenderInstance* instance);
+
 //----------------------------------------------------------------------------//
+
+static VkCommandBuffer _render_start_single_time_command(RenderInstance* instance);
+static void _render_end_single_time_command(RenderInstance* instance, VkCommandBuffer buffer);
 
 static uint32 _render_find_memory_type(RenderInstance* instance, uint32 typeFilter, VkMemoryPropertyFlags properties);
 
@@ -72,11 +78,15 @@ bool render_init(RenderInstance** instance, uint32 windowW, uint32 windowH, cons
 	if(!_render_create_swapchain(inst, windowW, windowH))
 		return false;
 
+	if(!_render_create_command_pool(inst))
+		return false;
+
 	return true;
 }
 
 void render_quit(RenderInstance* inst)
 {
+	_render_destroy_command_pool(inst);
 	_render_destroy_swapchain(inst);
 	_render_destroy_vk_device(inst);
 	_render_destroy_vk_instance(inst);
@@ -174,6 +184,127 @@ void render_destroy_image_view(RenderInstance* inst, VkImageView view)
 	vkDestroyImageView(inst->device, view, NULL);
 }
 
+VkBuffer render_create_buffer(RenderInstance* inst, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory* memory)
+{
+	VkBufferCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	createInfo.size = size;
+	createInfo.usage = usage;
+	createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VkBuffer buffer;
+	if(vkCreateBuffer(inst->device, &createInfo, nullptr, &buffer) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create buffer");
+		return buffer;
+	}
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(inst->device, buffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = _render_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
+
+	if(vkAllocateMemory(inst->device, &allocInfo, nullptr, memory) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to allocate memory for buffer");
+		return buffer;
+	}
+	
+	vkBindBufferMemory(inst->device, buffer, *memory, 0);
+
+	return buffer;
+}
+
+void render_destroy_buffer(RenderInstance* inst, VkBuffer buffer, VkDeviceMemory memory)
+{
+	vkFreeMemory(inst->device, memory, NULL);
+	vkDestroyBuffer(inst->device, buffer, NULL);
+}
+
+void render_copy_buffer(RenderInstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize size)
+{
+	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+
+	VkBufferCopy copyRegion = {};
+	copyRegion.srcOffset = 0;
+	copyRegion.dstOffset = 0;
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, src, dst, 1, &copyRegion);
+
+	_render_end_single_time_command(inst, commandBuffer);
+}
+
+void render_copy_buffer_to_image(RenderInstance* inst, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 1;
+	region.imageOffset = {0, 0, 0};
+	region.imageExtent = {width, height, 1};
+
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+	_render_end_single_time_command(inst, commandBuffer);
+}
+
+void render_transition_image_layout(RenderInstance* inst, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+{
+	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+
+	VkImageMemoryBarrier barrier = {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.oldLayout = oldLayout;
+	barrier.newLayout = newLayout;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.image = image;
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.levelCount = mipLevels;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.layerCount = 1;
+	barrier.srcAccessMask = 0;
+	barrier.dstAccessMask = 0;
+
+	VkPipelineStageFlags sourceStage;
+	VkPipelineStageFlags destinationStage;
+
+	if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) 
+	{
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
+	else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) 
+	{
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} 
+	else
+	{
+		ERROR_LOG("unsupported image transition");
+	}
+
+	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+	_render_end_single_time_command(inst, commandBuffer);
+}
+
 uint32* render_load_spirv(const char* path, uint64* size)
 {
 	FILE* fptr = fopen(path, "rb");
@@ -184,13 +315,14 @@ uint32* render_load_spirv(const char* path, uint64* size)
 	}
 
 	fseek(fptr, 0, SEEK_END);
-	*size = ftell(fptr) / sizeof(uint32);
+	*size = ftell(fptr);
 
 	fseek(fptr, 0, SEEK_SET);
 	uint32* code = (uint32*)malloc(*size);
-	fread(code, sizeof(uint32), *size, fptr);
+	fread(code, *size, 1, fptr);
 
 	fclose(fptr);
+	return code;
 }
 
 void render_free_spirv(uint32* code)
@@ -533,6 +665,11 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 		if(swapchainFormatCount == 0 || swapchainPresentModeCount == 0)
 			continue;
 
+		//check if anisotropy is supported:
+		//---------------
+		if(features.samplerAnisotropy == VK_FALSE)
+			continue;
+
 		//score device:
 		//---------------
 
@@ -601,6 +738,7 @@ static bool _render_create_device(RenderInstance* inst)
 	//set features:
 	//---------------
 	VkPhysicalDeviceFeatures features = {}; //TODO: allow wanted features to be passed in
+	features.samplerAnisotropy = VK_TRUE;
 
 	//create device:
 	//---------------
@@ -760,7 +898,66 @@ static void _render_destroy_swapchain(RenderInstance* inst)
 	vkDestroySwapchainKHR(inst->device, inst->swapchain, NULL);
 }
 
+static bool _render_create_command_pool(RenderInstance* inst)
+{
+	MSG_LOG("creating command pool...");
+
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	poolInfo.queueFamilyIndex = inst->graphicsFamilyIdx;
+
+	if(vkCreateCommandPool(inst->device, &poolInfo, nullptr, &inst->commandPool) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create command pool");
+		return false;
+	}
+
+	return true;
+}
+
+static void _render_destroy_command_pool(RenderInstance* inst)
+{
+	MSG_LOG("destroying command pool...");
+
+	vkDestroyCommandPool(inst->device, inst->commandPool, NULL);
+}
+
 //----------------------------------------------------------------------------//
+
+static VkCommandBuffer _render_start_single_time_command(RenderInstance* inst)
+{
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = inst->commandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(inst->device, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	return commandBuffer;
+}
+
+static void _render_end_single_time_command(RenderInstance* inst, VkCommandBuffer commandBuffer)
+{
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(inst->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(inst->graphicsQueue);
+
+	vkFreeCommandBuffers(inst->device, inst->commandPool, 1, &commandBuffer);
+}
 
 static uint32 _render_find_memory_type(RenderInstance* inst, uint32 typeFilter, VkMemoryPropertyFlags properties)
 {
