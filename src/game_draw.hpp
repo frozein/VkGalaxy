@@ -8,6 +8,15 @@
 
 #define FRAMES_IN_FLIGHT 2
 
+//sdfasdfasdf
+
+struct TerrainMemBlock
+{
+	uint64 size;
+	uint64 start;
+	bool taken;
+};
+
 struct DrawState
 {
 	RenderInstance* instance;
@@ -35,8 +44,10 @@ struct DrawState
 	VkPipelineLayout terrainPipelineLayout;
 	VkPipeline terrainPipeline;
 
+	uint64 terrainVertexCap;
 	VkBuffer terrainVertexBuffer;
 	VkDeviceMemory terrainVertexBufferMemory;
+	TerrainMemBlock* terrainVertexMem;
 
 	VkBuffer terrainStorageBuffers[FRAMES_IN_FLIGHT];
 	VkDeviceMemory terrainUniformBufferMemory[FRAMES_IN_FLIGHT];
@@ -53,9 +64,30 @@ struct DrawState
 
 //----------------------------------------------------------------------------//
 
+struct TerrainVertex
+{
+	qm::vec3 pos;
+	qm::vec2 texCoord;
+	qm::vec3 normal;
+};
+
+struct TerrainMesh
+{
+	uint64 id;
+	qm::vec3 pos;
+
+	uint64 vertexCount;
+	TerrainVertex* mesh;
+};
+
+//----------------------------------------------------------------------------//
+
 bool gamedraw_init(DrawState** state);
 void gamedraw_quit(DrawState* state);
 
 void gamedraw_draw(DrawState* state);
+
+void gamedraw_add_terrain_mesh(DrawState* state, TerrainMesh mesh);
+void gamedraw_remove_terrain_mesh(DrawState* state, uint64 meshID);
 
 #endif
