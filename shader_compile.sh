@@ -19,7 +19,7 @@ walk_dir ()
             INPUT_FILE="$pathname"
             OUTPUT_FILE=$BASE_OUTPUT_DIR$RELATIVE_PATH.spv
 
-            if [ $INPUT_FILE -nt $OUTPUT_FILE ]; then
+            if [ $INPUT_FILE -nt $OUTPUT_FILE ] || [ ! -f $OUTPUT_FILE ]; then
                 OUTPUT_FILE_DIR=${OUTPUT_FILE%/*}
 
                 if [ ! -d "$OUTPUT_FILE_DIR" ]; then
