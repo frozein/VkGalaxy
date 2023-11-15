@@ -1,3 +1,5 @@
+#ifdef VULKAN
+
 #version 450
 
 layout(location = 0) in vec2 texPos;
@@ -17,3 +19,5 @@ void main()
 {
 	outColor = vec4(1.0);//vec4(texture(texAtlas, texPos).xyz, 1.0);
 }
+
+#endif
