@@ -5,14 +5,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-//----------------------------------------------------------------------------//
-
-struct TerrainVertex
-{
-	qm::vec3 pos;
-	qm::vec2 texCoord;
-	qm::vec3 normal;
-};
+#define MIN_TERRAIN_MEM_BLOCK_SIZE 32
+#define MAX_TERRAIN_MEM_BLOCK_SIZE 4194304
 
 //----------------------------------------------------------------------------//
 
@@ -36,7 +30,7 @@ static void _gamedraw_destroy_sync_objects(DrawState* state);
 static bool _gamedraw_create_terrain_pipeline(DrawState* state);
 static void _gamedraw_destroy_terrain_pipeline(DrawState* state);
 
-static bool _gamedraw_create_terrain_vertex_buffer(DrawState* state);
+static bool _gamedraw_create_terrain_vertex_buffer(DrawState* state, uint64 numVertices);
 static void _gamedraw_destroy_terrain_vertex_buffer(DrawState* state);
 
 static bool _gamedraw_create_terrain_storage_buffer(DrawState* state);
@@ -190,6 +184,18 @@ void gamedraw_draw(DrawState* s)
 		throw std::runtime_error("FAILED TO PRESENT SWAP CHAIN IMAGE");*/
 
 	frameIndex = (frameIndex + 1) % FRAMES_IN_FLIGHT;
+}
+
+//----------------------------------------------------------------------------//
+
+void gamedraw_add_terrain_mesh(DrawState* state, TerrainMesh mesh)
+{
+
+}
+
+void gamedraw_remove_terrain_mesh(DrawState* state, uint64 meshID)
+{
+
 }
 
 //----------------------------------------------------------------------------//
@@ -658,9 +664,9 @@ static void _gamedraw_destroy_terrain_pipeline(DrawState* s)
 	vkDestroyDescriptorSetLayout(s->instance->device, s->terrainPipelineDescriptorLayout, NULL);
 }
 
-static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
+static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s, uint64 numVertices)
 {
-	VkDeviceSize bufferSize = 3 * sizeof(TerrainVertex);
+	VkDeviceSize bufferSize = numVertices * sizeof(TerrainVertex);
 
 	//create staging buffer:
 	VkDeviceMemory stagingBufferMemory;
@@ -679,10 +685,21 @@ static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
 	s->terrainVertexBuffer = render_create_buffer(s->instance, bufferSize, 
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->terrainVertexBufferMemory);
-	render_copy_buffer(s->instance, stagingBuffer, s->terrainVertexBuffer, bufferSize);
+	render_copy_buffer(s->instance, stagingBuffer, s->terrainVertexBuffer, bufferSize, 0, 0);
 
 	//free staging buffer:
 	render_destroy_buffer(s->instance, stagingBuffer, stagingBufferMemory);
+
+	//init mem blocks:
+	s->terrainVertexMem = (TerrainMemBlock*)malloc(numVertices / MIN_TERRAIN_MEM_BLOCK_SIZE * sizeof(TerrainMemBlock));
+	for(int32 i = 0; i < numVertices / MIN_TERRAIN_MEM_BLOCK_SIZE; i++)
+	{
+		uint32 vertexIdx = i * MIN_TERRAIN_MEM_BLOCK_SIZE;
+
+		s->terrainVertexMem[i].size = MAX_TERRAIN_MEM_BLOCK_SIZE;
+		s->terrainVertexMem[i].start = i / MAX_TERRAIN_MEM_BLOCK_SIZE;
+		s->terrainVertexMem[i].taken = false;
+	}
 
 	return true;
 }

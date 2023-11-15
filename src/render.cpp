@@ -224,13 +224,13 @@ void render_destroy_buffer(RenderInstance* inst, VkBuffer buffer, VkDeviceMemory
 	vkDestroyBuffer(inst->device, buffer, NULL);
 }
 
-void render_copy_buffer(RenderInstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize size)
+void render_copy_buffer(RenderInstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize size, uint64 srcOffset, uint64 dstOffset)
 {
 	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
 
 	VkBufferCopy copyRegion = {};
-	copyRegion.srcOffset = 0;
-	copyRegion.dstOffset = 0;
+	copyRegion.srcOffset = srcOffset;
+	copyRegion.dstOffset = dstOffset;
 	copyRegion.size = size;
 	vkCmdCopyBuffer(commandBuffer, src, dst, 1, &copyRegion);
 

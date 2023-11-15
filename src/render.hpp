@@ -55,7 +55,7 @@ void render_destroy_image_view(RenderInstance* instance, VkImageView view);
 VkBuffer render_create_buffer(RenderInstance* instance, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory* memory);
 void render_destroy_buffer(RenderInstance* instance, VkBuffer buffer, VkDeviceMemory memory);
 
-void render_copy_buffer(RenderInstance* instance, VkBuffer src, VkBuffer dst, VkDeviceSize size);
+void render_copy_buffer(RenderInstance* instance, VkBuffer src, VkBuffer dst, VkDeviceSize size, uint64 srcOffset, uint64 dstOffset);
 void render_copy_buffer_to_image(RenderInstance* instance, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
 void render_transition_image_layout(RenderInstance* instance, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
