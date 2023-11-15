@@ -8,15 +8,6 @@
 
 #define FRAMES_IN_FLIGHT 2
 
-//sdfasdfasdf
-
-struct TerrainMemBlock
-{
-	uint64 size;
-	uint64 start;
-	bool taken;
-};
-
 struct DrawState
 {
 	RenderInstance* instance;
@@ -47,7 +38,6 @@ struct DrawState
 	uint64 terrainVertexCap;
 	VkBuffer terrainVertexBuffer;
 	VkDeviceMemory terrainVertexBufferMemory;
-	TerrainMemBlock* terrainVertexMem;
 
 	VkBuffer terrainStorageBuffers[FRAMES_IN_FLIGHT];
 	VkDeviceMemory terrainUniformBufferMemory[FRAMES_IN_FLIGHT];

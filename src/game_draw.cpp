@@ -5,9 +5,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define MIN_TERRAIN_MEM_BLOCK_SIZE 32
-#define MAX_TERRAIN_MEM_BLOCK_SIZE 4194304
-
 //----------------------------------------------------------------------------//
 
 static bool _gamedraw_create_depth_buffer(DrawState* state);
@@ -30,7 +27,7 @@ static void _gamedraw_destroy_sync_objects(DrawState* state);
 static bool _gamedraw_create_terrain_pipeline(DrawState* state);
 static void _gamedraw_destroy_terrain_pipeline(DrawState* state);
 
-static bool _gamedraw_create_terrain_vertex_buffer(DrawState* state, uint64 numVertices);
+static bool _gamedraw_create_terrain_vertex_buffer(DrawState* state);
 static void _gamedraw_destroy_terrain_vertex_buffer(DrawState* state);
 
 static bool _gamedraw_create_terrain_storage_buffer(DrawState* state);
@@ -456,8 +453,8 @@ static bool _gamedraw_create_terrain_pipeline(DrawState* s)
 	//compile:
 	//---------------
 	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32* vertexCode   = render_load_spirv("spirv/vertex.vert.spv", &vertexCodeSize);
-	uint32* fragmentCode = render_load_spirv("spirv/fragment.frag.spv", &fragmentCodeSize);
+	uint32* vertexCode   = render_load_spirv("assets/spirv/vertex.vert.spv", &vertexCodeSize);
+	uint32* fragmentCode = render_load_spirv("assets/spirv/fragment.frag.spv", &fragmentCodeSize);
 
 	//create shader modules:
 	//---------------
@@ -664,9 +661,9 @@ static void _gamedraw_destroy_terrain_pipeline(DrawState* s)
 	vkDestroyDescriptorSetLayout(s->instance->device, s->terrainPipelineDescriptorLayout, NULL);
 }
 
-static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s, uint64 numVertices)
+static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
 {
-	VkDeviceSize bufferSize = numVertices * sizeof(TerrainVertex);
+	VkDeviceSize bufferSize = 3 * sizeof(TerrainVertex);
 
 	//create staging buffer:
 	VkDeviceMemory stagingBufferMemory;
@@ -689,17 +686,6 @@ static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s, uint64 numVerti
 
 	//free staging buffer:
 	render_destroy_buffer(s->instance, stagingBuffer, stagingBufferMemory);
-
-	//init mem blocks:
-	s->terrainVertexMem = (TerrainMemBlock*)malloc(numVertices / MIN_TERRAIN_MEM_BLOCK_SIZE * sizeof(TerrainMemBlock));
-	for(int32 i = 0; i < numVertices / MIN_TERRAIN_MEM_BLOCK_SIZE; i++)
-	{
-		uint32 vertexIdx = i * MIN_TERRAIN_MEM_BLOCK_SIZE;
-
-		s->terrainVertexMem[i].size = MAX_TERRAIN_MEM_BLOCK_SIZE;
-		s->terrainVertexMem[i].start = i / MAX_TERRAIN_MEM_BLOCK_SIZE;
-		s->terrainVertexMem[i].taken = false;
-	}
 
 	return true;
 }
@@ -738,7 +724,7 @@ static bool _gamedraw_create_terrain_texture_atlas(DrawState* s)
 	//---------------
 	int32 width, height, numChannels;
 	stbi_set_flip_vertically_on_load(true);
-	stbi_uc* raw = stbi_load("textures/atlas.jpg", &width, &height, &numChannels, STBI_rgb_alpha);
+	stbi_uc* raw = stbi_load("assets/textures/atlas.jpg", &width, &height, &numChannels, STBI_rgb_alpha);
 	if(!raw)
 	{
 		ERROR_LOG("failed to load texture atlas");
