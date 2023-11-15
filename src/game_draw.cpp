@@ -450,8 +450,8 @@ static bool _gamedraw_create_terrain_pipeline(DrawState* s)
 	//compile:
 	//---------------
 	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32* vertexCode   = render_load_spirv("spirv/vertex.spv", &vertexCodeSize);
-	uint32* fragmentCode = render_load_spirv("spirv/fragment.spv", &fragmentCodeSize);
+	uint32* vertexCode   = render_load_spirv("spirv/vertex.vert.spv", &vertexCodeSize);
+	uint32* fragmentCode = render_load_spirv("spirv/fragment.frag.spv", &fragmentCodeSize);
 
 	//create shader modules:
 	//---------------
@@ -863,6 +863,8 @@ static bool _gamedraw_create_terrain_descriptors(DrawState* s)
 
 		vkUpdateDescriptorSets(s->instance->device, 2, descriptorWrites, 0, nullptr);
 	}
+
+	return true;
 }
 
 static void _gamedraw_destroy_terrain_descriptors(DrawState* s)
