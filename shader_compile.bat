@@ -1,14 +1,18 @@
 @echo off
+Setlocal EnableDelayedExpansion
 
-setlocal EnableDelayedExpansion
+cd assets/shaders/
 
-for %%f in (assets/shaders/*) do (
-	set "input=assets/shaders/%%~nxf"
-	set "output=assets/spirv/%%~nxf.spv"
+for /r %%i in (*) do (
+	set input=%%i
+	set output=!input:\assets\shaders\=\assets\spirv\!.spv
 
-    echo !input! --- !output!
+	set pathOfInput=%%~dpi
+	set pathToCreate=!pathOfInput:\assets\shaders\=\assets\spirv\!
+	mkdir !pathToCreate! 2>NUL
 
-    call "C:\Program Files\VulkanSDK\1.3.231.1\Bin\glslc.exe" !input! -o !output!
-
-	echo.
+	echo Compiling shader %%i
+	glslc !input! -o !output!
 )
+
+cd ../..
