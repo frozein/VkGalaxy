@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 
 for %%f in (assets/shaders/*) do (
 	set "input=assets/shaders/%%~nxf"
-	set "output=assets/spirv/%%~nf.spv"
+	set "output=assets/spirv/%%~nxf.spv"
 
     echo !input! --- !output!
 
@@ -12,5 +12,3 @@ for %%f in (assets/shaders/*) do (
 
 	echo.
 )
-
-pause

@@ -1,7 +1,24 @@
+# bin directories:
 [Bb]uild/
 [Bb]in/
+
+# vscode configuration:
 .vscode/
+
+# shader bytecode directory:
 spirv/
+
+# cmake files:
 CMakeFiles/
 cmake_install.cmake
 CMakeCache.txt
+
+# visual studio files/directories:
+*.vcxproj*
+*.sln
+.cmake/
+x64/
+x32/
+[Dd]ebug/
+[Rr]elease/
+.vs/
