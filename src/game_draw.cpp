@@ -1,9 +1,7 @@
 #include "game_draw.hpp"
 #include <malloc.h>
 #include <stdio.h>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <string.h>
 
 //----------------------------------------------------------------------------//
 
@@ -33,15 +31,16 @@ static void _gamedraw_destroy_terrain_vertex_buffer(DrawState* state);
 static bool _gamedraw_create_terrain_storage_buffer(DrawState* state);
 static void _gamedraw_destroy_terrain_uniform_buffer(DrawState* state);
 
-static bool _gamedraw_create_terrain_texture_atlas(DrawState* state);
-static void _gamedraw_destroy_terrain_texture_atlas(DrawState* state);
-
 static bool _gamedraw_create_terrain_descriptors(DrawState* state);
 static void _gamedraw_destroy_terrain_descriptors(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
 static void _gamedraw_record_terrain_command_buffer(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+
+//----------------------------------------------------------------------------//
+
+static void _gamedraw_window_resized(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
@@ -94,9 +93,6 @@ bool gamedraw_init(DrawState** state)
 	if(!_gamedraw_create_terrain_storage_buffer(s))
 		return false;
 
-	if(!_gamedraw_create_terrain_texture_atlas(s))
-		return false;
-
 	if(!_gamedraw_create_terrain_descriptors(s))
 		return false;
 
@@ -106,7 +102,6 @@ bool gamedraw_init(DrawState** state)
 void gamedraw_quit(DrawState* s)
 {
 	_gamedraw_destroy_terrain_descriptors(s);
-	_gamedraw_destroy_terrain_texture_atlas(s);
 	_gamedraw_destroy_terrain_uniform_buffer(s);
 	_gamedraw_destroy_terrain_vertex_buffer(s);
 	_gamedraw_destroy_terrain_pipeline(s);
@@ -133,13 +128,16 @@ void gamedraw_draw(DrawState* s)
 	uint32 imageIdx;
 	VkResult imageAquireResult = vkAcquireNextImageKHR(s->instance->device, s->instance->swapchain, UINT64_MAX, 
 		s->imageAvailableSemaphores[frameIndex], VK_NULL_HANDLE, &imageIdx);
-	/*if(imageAquireResult == VK_ERROR_OUT_OF_DATE_KHR || imageAquireResult == VK_SUBOPTIMAL_KHR)
+	if(imageAquireResult == VK_ERROR_OUT_OF_DATE_KHR || imageAquireResult == VK_SUBOPTIMAL_KHR)
 	{
-		_recreate_vk_swap_chain();
+		_gamedraw_window_resized(s);
 		return;
 	}
 	else if(imageAquireResult != VK_SUCCESS)
-		throw std::runtime_error("FAILED TO ACQUIRE SWAP CHAIN IMAGE");*/
+	{
+		ERROR_LOG("failed to acquire swapchaim image");
+		return;
+	}
 
 	vkResetFences(s->instance->device, 1, &s->inFlightFences[frameIndex]);
 
@@ -173,26 +171,11 @@ void gamedraw_draw(DrawState* s)
 
 	VkResult presentResult = vkQueuePresentKHR(s->instance->presentQueue, &presentInfo);
 	if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
-	{
-		//_recreate_vk_swap_chain();
-		//g_framebufferResized = false;
-	}
-	/*else if(presentResult != VK_SUCCESS)
-		throw std::runtime_error("FAILED TO PRESENT SWAP CHAIN IMAGE");*/
+		_gamedraw_window_resized(s);
+	else if(presentResult != VK_SUCCESS)
+		ERROR_LOG("failed to present swapchain image");
 
 	frameIndex = (frameIndex + 1) % FRAMES_IN_FLIGHT;
-}
-
-//----------------------------------------------------------------------------//
-
-void gamedraw_add_terrain_mesh(DrawState* state, TerrainMesh mesh)
-{
-
-}
-
-void gamedraw_remove_terrain_mesh(DrawState* state, uint64 meshID)
-{
-
 }
 
 //----------------------------------------------------------------------------//
@@ -430,18 +413,11 @@ static bool _gamedraw_create_terrain_pipeline(DrawState* s)
 	storageLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	storageLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-	samplerLayoutBinding.binding = 1;
-	samplerLayoutBinding.descriptorCount = 1;
-	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-	samplerLayoutBinding.pImmutableSamplers = nullptr;
-
-	VkDescriptorSetLayoutBinding layouts[2] = {storageLayoutBinding, samplerLayoutBinding};
+	VkDescriptorSetLayoutBinding layouts[1] = {storageLayoutBinding};
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 2;
+	layoutInfo.bindingCount = 1;
 	layoutInfo.pBindings = layouts;
 
 	if(vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->terrainPipelineDescriptorLayout) != VK_SUCCESS)
@@ -663,26 +639,39 @@ static void _gamedraw_destroy_terrain_pipeline(DrawState* s)
 
 static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
 {
-	VkDeviceSize bufferSize = 3 * sizeof(TerrainVertex);
+	VkDeviceSize vertSize = 4 * sizeof(TerrainVertex);
+	VkDeviceSize indexSize = 6 * sizeof(uint32);
 
 	//create staging buffer:
 	VkDeviceMemory stagingBufferMemory;
-	VkBuffer stagingBuffer = render_create_buffer(s->instance, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+	VkBuffer stagingBuffer = render_create_buffer(s->instance, vertSize > indexSize ? vertSize : indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferMemory);
 
-	TerrainVertex tempData[3] = { {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}, {{0.0f, 0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}} };
+	TerrainVertex tempVerts[4] = { {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}, {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}} };
+	uint32 tempIndices[6] = {0, 1, 2, 1, 2, 3};
 
-	//fill staging buffer:
+	//fill staging buffer (verts):
 	void* data;
-	vkMapMemory(s->instance->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-	memcpy(data, tempData, (size_t)bufferSize);
+	vkMapMemory(s->instance->device, stagingBufferMemory, 0, vertSize, 0, &data);
+	memcpy(data, tempVerts, (size_t)vertSize);
 	vkUnmapMemory(s->instance->device, stagingBufferMemory);
 
-	//create dest buffer and copy into it:
-	s->terrainVertexBuffer = render_create_buffer(s->instance, bufferSize, 
+	//create dest buffer and copy into it (verts):
+	s->terrainVertexBuffer = render_create_buffer(s->instance, vertSize, 
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->terrainVertexBufferMemory);
-	render_copy_buffer(s->instance, stagingBuffer, s->terrainVertexBuffer, bufferSize, 0, 0);
+	render_copy_buffer(s->instance, stagingBuffer, s->terrainVertexBuffer, vertSize, 0, 0);
+
+	//fill staging buffer (indices):
+	vkMapMemory(s->instance->device, stagingBufferMemory, 0, indexSize, 0, &data);
+	memcpy(data, tempIndices, (size_t)indexSize);
+	vkUnmapMemory(s->instance->device, stagingBufferMemory);
+
+	//create dest buffer and copy into it (indices):
+	s->terrainIndexBuffer = render_create_buffer(s->instance, indexSize, 
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->terrainIndexBufferMemory);
+	render_copy_buffer(s->instance, stagingBuffer, s->terrainIndexBuffer, indexSize, 0, 0);
 
 	//free staging buffer:
 	render_destroy_buffer(s->instance, stagingBuffer, stagingBufferMemory);
@@ -693,6 +682,7 @@ static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
 static void _gamedraw_destroy_terrain_vertex_buffer(DrawState* s)
 {
 	render_destroy_buffer(s->instance, s->terrainVertexBuffer, s->terrainVertexBufferMemory);
+	render_destroy_buffer(s->instance, s->terrainIndexBuffer, s->terrainIndexBufferMemory);
 }
 
 static bool _gamedraw_create_terrain_storage_buffer(DrawState* s)
@@ -718,97 +708,15 @@ static void _gamedraw_destroy_terrain_uniform_buffer(DrawState* s)
 	}
 }
 
-static bool _gamedraw_create_terrain_texture_atlas(DrawState* s)
-{
-	//load from disk:
-	//---------------
-	int32 width, height, numChannels;
-	stbi_set_flip_vertically_on_load(true);
-	stbi_uc* raw = stbi_load("assets/textures/atlas.jpg", &width, &height, &numChannels, STBI_rgb_alpha);
-	if(!raw)
-	{
-		ERROR_LOG("failed to load texture atlas");
-		return false;
-	}
-
-	VkDeviceSize imageSize = width * height * 4;
-
-	VkDeviceMemory stagingBufferMemory;
-	VkBuffer stagingBuffer = render_create_buffer(s->instance, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferMemory);
-
-	//create image:
-	//---------------
-	void* stagingBufferData;
-	vkMapMemory(s->instance->device, stagingBufferMemory, 0, imageSize, 0, &stagingBufferData);
-	memcpy(stagingBufferData, raw, (size_t)imageSize);
-	vkUnmapMemory(s->instance->device, stagingBufferMemory);
-
-	stbi_image_free(raw);
-
-	s->terrainTextureAtlas = render_create_image(s->instance, width, height, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, 
-		VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->terrainTextureAtlasMemory);
-	render_transition_image_layout(s->instance, s->terrainTextureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-	render_copy_buffer_to_image(s->instance, stagingBuffer, s->terrainTextureAtlas, width, height);
-	render_transition_image_layout(s->instance, s->terrainTextureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
-
-	vkDestroyBuffer(s->instance->device, stagingBuffer, nullptr);
-	vkFreeMemory(s->instance->device, stagingBufferMemory, nullptr);
-
-	//create image view:
-	//---------------
-	s->terrainTextureAtlasView = render_create_image_view(s->instance, s->terrainTextureAtlas, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-
-	//create sampler:
-	//---------------
-	VkPhysicalDeviceProperties properties = {};
-	vkGetPhysicalDeviceProperties(s->instance->physicalDevice, &properties);
-
-	VkSamplerCreateInfo samplerInfo = {};
-	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerInfo.magFilter = VK_FILTER_LINEAR;
-	samplerInfo.minFilter = VK_FILTER_LINEAR;
-	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.anisotropyEnable = VK_TRUE;
-	samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-	samplerInfo.unnormalizedCoordinates = VK_FALSE;
-	samplerInfo.compareEnable = VK_FALSE;
-	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	samplerInfo.mipLodBias = 0.0f;
-	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = 1.0f;
-
-	if(vkCreateSampler(s->instance->device, &samplerInfo, nullptr, &s->terrainTextureAtlasSampler) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create texture atlas sampler");
-		return false;
-	}
-
-	return true;
-}
-
-static void _gamedraw_destroy_terrain_texture_atlas(DrawState* s)
-{
-	vkDestroySampler(s->instance->device, s->terrainTextureAtlasSampler, NULL);
-	render_destroy_image_view(s->instance, s->terrainTextureAtlasView);
-	render_destroy_image(s->instance, s->terrainTextureAtlas, s->terrainTextureAtlasMemory);
-}
-
 static bool _gamedraw_create_terrain_descriptors(DrawState* s)
 {
-	VkDescriptorPoolSize poolSizes[2] = {};
+	VkDescriptorPoolSize poolSizes[1] = {};
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	poolSizes[0].descriptorCount = FRAMES_IN_FLIGHT;
-	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = FRAMES_IN_FLIGHT;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 2;
+	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = poolSizes;
 	poolInfo.maxSets = FRAMES_IN_FLIGHT;
 
@@ -846,7 +754,7 @@ static bool _gamedraw_create_terrain_descriptors(DrawState* s)
 		imageInfo.imageView = s->terrainTextureAtlasView;
 		imageInfo.sampler = s->terrainTextureAtlasSampler;
 
-		VkWriteDescriptorSet descriptorWrites[2] = {};
+		VkWriteDescriptorSet descriptorWrites[1] = {};
 
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptorWrites[0].dstSet = s->terrainDescriptorSets[i];
@@ -856,15 +764,7 @@ static bool _gamedraw_create_terrain_descriptors(DrawState* s)
 		descriptorWrites[0].descriptorCount = 1;
 		descriptorWrites[0].pBufferInfo = &bufferInfo;
 
-		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = s->terrainDescriptorSets[i];
-		descriptorWrites[1].dstBinding = 1;
-		descriptorWrites[1].dstArrayElement = 0;
-		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		descriptorWrites[1].descriptorCount = 1;
-		descriptorWrites[1].pImageInfo = &imageInfo;
-
-		vkUpdateDescriptorSets(s->instance->device, 2, descriptorWrites, 0, nullptr);
+		vkUpdateDescriptorSets(s->instance->device, 1, descriptorWrites, 0, nullptr);
 	}
 
 	return true;
@@ -921,13 +821,32 @@ static void _gamedraw_record_terrain_command_buffer(DrawState* s, VkCommandBuffe
 	VkBuffer vertexBuffers[] = {s->terrainVertexBuffer};
 	VkDeviceSize offsets[] = {0};
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets); 
+	vkCmdBindIndexBuffer(commandBuffer, s->terrainIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->terrainPipelineLayout, 0, 1, &s->terrainDescriptorSets[frameIndex], 0, nullptr);
 
-	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 	vkCmdEndRenderPass(commandBuffer);
 
 	vkEndCommandBuffer(commandBuffer) != VK_SUCCESS;
+}
+
+//----------------------------------------------------------------------------//
+
+static void _gamedraw_window_resized(DrawState* s)
+{
+	int32 w, h;
+	glfwGetFramebufferSize(s->instance->window, &w, &h);
+	if(w == 0 || h == 0) //TODO: TEST
+		return;
+
+	render_resize_swapchain(s->instance, w, h);
+
+	_gamedraw_destroy_depth_buffer(s);
+	_gamedraw_create_depth_buffer(s);
+
+	_gamedraw_destroy_framebuffers(s);
+	_gamedraw_create_framebuffers(s);
 }
 
 //----------------------------------------------------------------------------//

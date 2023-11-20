@@ -35,9 +35,10 @@ struct DrawState
 	VkPipelineLayout terrainPipelineLayout;
 	VkPipeline terrainPipeline;
 
-	uint64 terrainVertexCap;
 	VkBuffer terrainVertexBuffer;
 	VkDeviceMemory terrainVertexBufferMemory;
+	VkBuffer terrainIndexBuffer;
+	VkDeviceMemory terrainIndexBufferMemory;
 
 	VkBuffer terrainStorageBuffers[FRAMES_IN_FLIGHT];
 	VkDeviceMemory terrainUniformBufferMemory[FRAMES_IN_FLIGHT];
@@ -76,8 +77,5 @@ bool gamedraw_init(DrawState** state);
 void gamedraw_quit(DrawState* state);
 
 void gamedraw_draw(DrawState* state);
-
-void gamedraw_add_terrain_mesh(DrawState* state, TerrainMesh mesh);
-void gamedraw_remove_terrain_mesh(DrawState* state, uint64 meshID);
 
 #endif
