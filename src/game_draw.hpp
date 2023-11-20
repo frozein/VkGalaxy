@@ -30,6 +30,11 @@ struct DrawState
 	VkSemaphore renderFinishedSemaphores[FRAMES_IN_FLIGHT];
 	VkFence inFlightFences[FRAMES_IN_FLIGHT];
 
+	VkBuffer cameraBuffers[FRAMES_IN_FLIGHT];
+	VkDeviceMemory cameraBuffersMemory[FRAMES_IN_FLIGHT];
+	VkBuffer cameraStagingBuffer;
+	VkDeviceMemory cameraStagingBufferMemory;
+
 	//terrain pipeline objects:
 	VkDescriptorSetLayout terrainPipelineDescriptorLayout;
 	VkPipelineLayout terrainPipelineLayout;
@@ -39,10 +44,6 @@ struct DrawState
 	VkDeviceMemory terrainVertexBufferMemory;
 	VkBuffer terrainIndexBuffer;
 	VkDeviceMemory terrainIndexBufferMemory;
-
-	VkBuffer terrainStorageBuffers[FRAMES_IN_FLIGHT];
-	VkDeviceMemory terrainUniformBufferMemory[FRAMES_IN_FLIGHT];
-	void* terrainUniformBuffersMapped[FRAMES_IN_FLIGHT];
 
 	VkImage terrainTextureAtlas;
 	VkImageView terrainTextureAtlasView;
@@ -59,7 +60,6 @@ struct TerrainVertex
 {
 	qm::vec3 pos;
 	qm::vec2 texCoord;
-	qm::vec3 normal;
 };
 
 struct TerrainMesh

@@ -257,6 +257,27 @@ void render_copy_buffer_to_image(RenderInstance* inst, VkBuffer buffer, VkImage 
 	_render_end_single_time_command(inst, commandBuffer);
 }
 
+void render_upload_with_staging_buffer(RenderInstance* inst, VkBuffer buf, uint64 size, uint64 offset, void* data)
+{
+	VkDeviceMemory stagingBufferMemory;
+	VkBuffer stagingBuffer = render_create_buffer(inst, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferMemory);
+
+	render_upload_with_staging_buffer(inst, stagingBuffer, stagingBufferMemory, buf, size, offset, data);
+
+	render_destroy_buffer(inst, stagingBuffer, stagingBufferMemory);
+}
+
+void render_upload_with_staging_buffer(RenderInstance* inst, VkBuffer stagingBuf, VkDeviceMemory stagingBufMem, VkBuffer buf, uint64 size, uint64 offset, void* data)
+{
+	void* mem;
+	vkMapMemory(inst->device, stagingBufMem, 0, size, 0, &mem);
+	memcpy(mem, data, size);
+	vkUnmapMemory(inst->device, stagingBufMem);
+
+	render_copy_buffer(inst, stagingBuf, buf, size, 0, offset);
+}
+
 void render_transition_image_layout(RenderInstance* inst, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
 {
 	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
