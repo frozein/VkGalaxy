@@ -45,7 +45,7 @@ bool game_init(GameState** state)
 		return false;
 	}
 
-	glfwSetInputMode(s->drawState->instance->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	//glfwSetInputMode(s->drawState->instance->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	glfwSetWindowUserPointer(s->drawState->instance->window, s);
 	glfwSetCursorPosCallback(s->drawState->instance->window, _game_cursor_pos_callback);
@@ -93,14 +93,13 @@ bool _game_camera_init(Camera** camera)
 		return false;
 	}
 
-	cam->orient = {0.0f, 0.0f, 0.0f};
-	cam->pos = {0.0f, 0.0f, 1.0f};
-	cam->front = {0.0f, 0.0f, -1.0f};
 	cam->up = {0.0f, 1.0f, 0.0f};
-
-	cam->fov = 90.0f;
-	cam->nearPlane = 0.1f;
+	cam->nearPlane = -100.0f; //TODO: figure out why this only works with weird near/far plane values
 	cam->farPlane = 100.0f;
+	cam->scale = 5.0f;
+
+	cam->dist = 10.0f;
+	cam->angle = 45.0f;
 
 	return true;
 }
@@ -112,28 +111,36 @@ void _game_camera_quit(Camera* cam)
 
 void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 {
-	float camSpeed = 1.0f * dt;
+	float camSpeed = 5.0f * dt;
+	float angleSpeed = 30.0f * dt;
+
+	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+
+	qm::vec3 forward = qm::vec3(forward4.x, forward4.y, forward4.z);
+	qm::vec3 side = qm::vec3(side4.x, side4.y, side4.z);
 
 	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		cam->pos = cam->pos + (qm::normalize({cam->front.x, 0.0f, cam->front.z}) * camSpeed);
+		cam->center = cam->center + (forward * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		cam->pos = cam->pos - (qm::normalize({cam->front.x, 0.0f, cam->front.z}) * camSpeed);
+		cam->center = cam->center - (forward * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		cam->pos = cam->pos - (qm::normalize(qm::cross(cam->front, cam->up)) * camSpeed);
+		cam->center = cam->center + (side * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		cam->pos = cam->pos + (qm::normalize(qm::cross(cam->front, cam->up)) * camSpeed);
-	if(glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-		cam->pos = cam->pos - cam->up * camSpeed; 
-	if(glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-		cam->pos = cam->pos + cam->up * camSpeed;
+		cam->center = cam->center - (side * camSpeed);
 
-	qm::mat3 camRotate = qm::top_left(qm::rotate(cam->orient));
-	cam->front = camRotate * qm::vec3(0.0f, 0.0f, -1.0f);
+	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+		cam->angle -= angleSpeed;
+	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+		cam->angle += angleSpeed;
+
+	qm::vec4 toPos = qm::rotate(side, 30.0f) * qm::vec4(forward, 1.0f);
+	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
 void _game_camera_cursor_moved(Camera* cam, float x, float y)
 {
-	static float lastX = 0.0f, lastY = 0.0f;
+	/*static float lastX = 0.0f, lastY = 0.0f;
 	
 	static bool firstMouse = true;
 	if(firstMouse)
@@ -158,7 +165,7 @@ void _game_camera_cursor_moved(Camera* cam, float x, float y)
 	if(cam->orient.x > 89.0f)
 		cam->orient.x = 89.0f;
 	if(cam->orient.x < -89.0f)
-		cam->orient.x = -89.0f;
+		cam->orient.x = -89.0f;*/
 }
 
 //----------------------------------------------------------------------------//

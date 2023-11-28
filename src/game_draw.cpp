@@ -147,7 +147,7 @@ void gamedraw_draw(DrawState* s, Camera* cam)
 	}
 	else if(imageAquireResult != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to acquire swapchaim image");
+		ERROR_LOG("failed to acquire swapchain image");
 		return;
 	}
 
@@ -159,8 +159,13 @@ void gamedraw_draw(DrawState* s, Camera* cam)
 	glfwGetWindowSize(s->instance->window, &windowW, &windowH);
 
 	qm::mat4 view, projection;
-	view = qm::lookat(cam->pos, cam->pos + cam->front, cam->up);
-	projection = qm::perspective(cam->fov, (float)windowW / (float)windowH, cam->nearPlane, cam->farPlane);
+	view = qm::lookat(cam->pos, cam->center, cam->up);
+
+	float aspect = (float)windowW / (float)windowH;
+	if(aspect > 1.0f)
+		projection = qm::orthographic(-cam->scale * aspect, cam->scale * aspect, -cam->scale, cam->scale, cam->nearPlane, cam->farPlane);
+	else
+		projection = qm::orthographic(-cam->scale, cam->scale, -cam->scale / aspect, cam->scale / aspect, cam->nearPlane, cam->farPlane);
 
 	CameraGPU camBuffer;
 	camBuffer.viewProj = projection * view;
@@ -663,7 +668,7 @@ static void _gamedraw_destroy_terrain_pipeline(DrawState* s)
 
 static bool _gamedraw_create_terrain_vertex_buffer(DrawState* s)
 {
-	TerrainVertex tempVerts[4] = { {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}} };
+	TerrainVertex tempVerts[4] = { {{-0.5f, 0.0f, -0.5f}, {0.0f, 0.0f}}, {{0.5f, 0.0f, -0.5f}, {1.0f, 0.0f}}, {{-0.5f, 0.0f, 0.5f}, {0.0f, 1.0f}}, {{0.5f, 0.0f, 0.5f}, {1.0f, 1.0f}} };
 	uint32 tempIndices[6] = {0, 1, 2, 1, 2, 3};
 
 	s->terrainVertexBuffer = render_create_buffer(s->instance, sizeof(tempVerts), 

@@ -76,13 +76,15 @@ struct TerrainMesh
 struct Camera
 {
 	qm::vec3 pos;
-	qm::vec3 front;
+	qm::vec3 center;
 	qm::vec3 up;
 
-	float fov;
+	float scale;
 	float nearPlane, farPlane;
 
-	qm::vec3 orient; //TODO: find a better place for this
+	//for game use only:
+	float dist;
+	float angle;
 };
 
 //----------------------------------------------------------------------------//
