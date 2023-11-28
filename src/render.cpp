@@ -742,16 +742,15 @@ static bool _render_create_device(RenderInstance* inst)
 		queueIndices[1] = inst->presentFamilyIdx;
 	}
 
+	f32 priority = 1.0f;
 	VkDeviceQueueCreateInfo queueInfos[2];
 	for(int32 i = 0; i < queueCount; i++)
 	{
-		f32 priotity = 1.0f;
-
 		VkDeviceQueueCreateInfo queueInfo = {};
 		queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueInfo.queueFamilyIndex = queueIndices[i]; //TODO: see how we can optimize this, when would we want multiple queues?
 		queueInfo.queueCount = 1;
-		queueInfo.pQueuePriorities = &priotity;
+		queueInfo.pQueuePriorities = &priority;
 
 		queueInfos[i] = queueInfo;
 	}
@@ -875,10 +874,10 @@ static bool _render_create_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 	swapchainInfo.clipped = VK_TRUE;
 	swapchainInfo.oldSwapchain = VK_NULL_HANDLE;
 
+	uint32 indices[] = {inst->graphicsFamilyIdx, inst->presentFamilyIdx};
+
 	if(inst->graphicsFamilyIdx != inst->presentFamilyIdx)
-	{
-		uint32 indices[] = {inst->graphicsFamilyIdx, inst->presentFamilyIdx};
-	
+	{	
 		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapchainInfo.queueFamilyIndexCount = 2;
 		swapchainInfo.pQueueFamilyIndices = indices;

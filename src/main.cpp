@@ -1,20 +1,14 @@
 #include <iostream>
-#include "game_draw.hpp"
+#include "game.hpp"
 
 int main()
 {
-	DrawState* state;
-	if(!gamedraw_init(&state))
+	GameState* state;
+	if(!game_init(&state))
 		return -1;
 
-	while(!glfwWindowShouldClose(state->instance->window))
-	{
-		gamedraw_draw(state);
-		glfwPollEvents();
-	}
-
-	vkDeviceWaitIdle(state->instance->device);
-	gamedraw_quit(state);
+	game_main_loop(state);
+	game_quit(state);
 
 	return 0;
 }

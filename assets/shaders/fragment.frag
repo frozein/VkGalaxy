@@ -1,5 +1,4 @@
 #version 450
-#ifdef VULKAN
 
 layout(location = 0) in vec2 texPos;
 
@@ -13,5 +12,3 @@ void main()
 {
 	outColor = vec4(1.0);
 }
-
-#endif //#ifdef VULKAN

@@ -5,6 +5,14 @@
 
 //----------------------------------------------------------------------------//
 
+//mirrors camera buffer on GPU
+struct CameraGPU
+{
+	qm::mat4 viewProj;
+};
+
+//----------------------------------------------------------------------------//
+
 static bool _gamedraw_create_depth_buffer(DrawState* state);
 static void _gamedraw_destroy_depth_buffer(DrawState* state);
 
@@ -101,6 +109,8 @@ bool gamedraw_init(DrawState** state)
 
 void gamedraw_quit(DrawState* s)
 {
+	vkDeviceWaitIdle(s->instance->device);
+
 	_gamedraw_destroy_terrain_descriptors(s);
 	_gamedraw_destroy_camera_buffer(s);
 	_gamedraw_destroy_terrain_vertex_buffer(s);
@@ -119,10 +129,12 @@ void gamedraw_quit(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
-void gamedraw_draw(DrawState* s)
+void gamedraw_draw(DrawState* s, Camera* cam)
 {
 	static uint32 frameIndex = 0;
 
+	//WAIT FOR IN-FLIGHT FENCES AND GET NEXT SWAPCHAIN IMAGE (essentially just making sure last frame is done):
+	//---------------
 	vkWaitForFences(s->instance->device, 1, &s->inFlightFences[frameIndex], VK_TRUE, UINT64_MAX);
 
 	uint32 imageIdx;
@@ -141,15 +153,27 @@ void gamedraw_draw(DrawState* s)
 
 	vkResetFences(s->instance->device, 1, &s->inFlightFences[frameIndex]);
 
-	//_update_uniform_buffer(s, g_frameIndex);
-	float scale = sinf((float)glfwGetTime());
-	qm::mat4 viewProj = qm::scale({scale, scale, scale});
-	render_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory, 
-		s->cameraBuffers[frameIndex], sizeof(qm::mat4), 0, &viewProj);
+	//UPDATE CAMERA BUFFER:
+	//---------------
+	int32 windowW, windowH;
+	glfwGetWindowSize(s->instance->window, &windowW, &windowH);
 
+	qm::mat4 view, projection;
+	view = qm::lookat(cam->pos, cam->pos + cam->front, cam->up);
+	projection = qm::perspective(cam->fov, (float)windowW / (float)windowH, cam->nearPlane, cam->farPlane);
+
+	CameraGPU camBuffer;
+	camBuffer.viewProj = projection * view;
+	render_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory, 
+		s->cameraBuffers[frameIndex], sizeof(CameraGPU), 0, &camBuffer);
+
+	//RECORD GRID COMMAND BUFFER:
+	//---------------
 	vkResetCommandBuffer(s->commandBuffers[frameIndex], 0);
 	_gamedraw_record_terrain_command_buffer(s, s->commandBuffers[frameIndex], frameIndex, imageIdx);
 
+	//SUBMIT COMMAND BUFFERS:
+	//---------------
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -164,6 +188,8 @@ void gamedraw_draw(DrawState* s)
 
 	vkQueueSubmit(s->instance->graphicsQueue, 1, &submitInfo, s->inFlightFences[frameIndex]);
 
+	//PRESENT RESULT TO SCREEN:
+	//---------------
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
@@ -661,7 +687,7 @@ static void _gamedraw_destroy_terrain_vertex_buffer(DrawState* s)
 
 static bool _gamedraw_create_camera_buffer(DrawState* s)
 {
-	VkDeviceSize bufferSize = sizeof(qm::mat4);
+	VkDeviceSize bufferSize = sizeof(CameraGPU);
 
 	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
@@ -723,7 +749,7 @@ static bool _gamedraw_create_terrain_descriptors(DrawState* s)
 		VkDescriptorBufferInfo bufferInfo = {};
 		bufferInfo.buffer = s->cameraBuffers[i];
 		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(qm::mat4); //TODO: figure out if this can be set dynamically?
+		bufferInfo.range = sizeof(CameraGPU); //TODO: figure out if this can be set dynamically?
 
 		VkWriteDescriptorSet descriptorWrites[1] = {};
 

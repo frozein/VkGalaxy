@@ -73,9 +73,23 @@ struct TerrainMesh
 
 //----------------------------------------------------------------------------//
 
+struct Camera
+{
+	qm::vec3 pos;
+	qm::vec3 front;
+	qm::vec3 up;
+
+	float fov;
+	float nearPlane, farPlane;
+
+	qm::vec3 orient; //TODO: find a better place for this
+};
+
+//----------------------------------------------------------------------------//
+
 bool gamedraw_init(DrawState** state);
 void gamedraw_quit(DrawState* state);
 
-void gamedraw_draw(DrawState* state);
+void gamedraw_draw(DrawState* state, Camera* cam);
 
 #endif

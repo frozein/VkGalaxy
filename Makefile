@@ -143,6 +143,30 @@ vulkancraft_shaders/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft_shaders.dir/build.make CMakeFiles/vulkancraft_shaders.dir/build
 .PHONY : vulkancraft_shaders/fast
 
+src/game.o: src/game.cpp.o
+.PHONY : src/game.o
+
+# target to build an object file
+src/game.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.o
+.PHONY : src/game.cpp.o
+
+src/game.i: src/game.cpp.i
+.PHONY : src/game.i
+
+# target to preprocess a source file
+src/game.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.i
+.PHONY : src/game.cpp.i
+
+src/game.s: src/game.cpp.s
+.PHONY : src/game.s
+
+# target to generate assembly for a file
+src/game.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.s
+.PHONY : src/game.cpp.s
+
 src/game_draw.o: src/game_draw.cpp.o
 .PHONY : src/game_draw.o
 
@@ -225,6 +249,9 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... vulkancraft_shaders"
 	@echo "... vulkancraft"
+	@echo "... src/game.o"
+	@echo "... src/game.i"
+	@echo "... src/game.s"
 	@echo "... src/game_draw.o"
 	@echo "... src/game_draw.i"
 	@echo "... src/game_draw.s"
