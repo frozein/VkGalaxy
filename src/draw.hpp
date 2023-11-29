@@ -1,8 +1,8 @@
-#ifndef GAMEDRAW_H
-#define GAMEDRAW_H
+#ifndef DRAW_H
+#define DRAW_H
 
-#include "render.hpp"
-#include "quickmath.hpp"
+#include "libs/render.hpp"
+#include "libs/quickmath.hpp"
 
 //----------------------------------------------------------------------------//
 
@@ -35,23 +35,18 @@ struct DrawState
 	VkBuffer cameraStagingBuffer;
 	VkDeviceMemory cameraStagingBufferMemory;
 
-	//terrain pipeline objects:
-	VkDescriptorSetLayout terrainPipelineDescriptorLayout;
-	VkPipelineLayout terrainPipelineLayout;
-	VkPipeline terrainPipeline;
+	//grid pipeline objects:
+	VkDescriptorSetLayout gridPipelineDescriptorLayout;
+	VkPipelineLayout gridPipelineLayout;
+	VkPipeline gridPipeline;
 
-	VkBuffer terrainVertexBuffer;
-	VkDeviceMemory terrainVertexBufferMemory;
-	VkBuffer terrainIndexBuffer;
-	VkDeviceMemory terrainIndexBufferMemory;
+	VkBuffer gridVertexBuffer;
+	VkDeviceMemory gridVertexBufferMemory;
+	VkBuffer gridIndexBuffer;
+	VkDeviceMemory gridIndexBufferMemory;
 
-	VkImage terrainTextureAtlas;
-	VkImageView terrainTextureAtlasView;
-	VkDeviceMemory terrainTextureAtlasMemory;
-	VkSampler terrainTextureAtlasSampler;
-
-	VkDescriptorPool terrainDescriptorPool;
-	VkDescriptorSet terrainDescriptorSets[FRAMES_IN_FLIGHT];
+	VkDescriptorPool gridDescriptorPool;
+	VkDescriptorSet gridDescriptorSets[FRAMES_IN_FLIGHT];
 };
 
 //----------------------------------------------------------------------------//
@@ -89,9 +84,9 @@ struct Camera
 
 //----------------------------------------------------------------------------//
 
-bool gamedraw_init(DrawState** state);
-void gamedraw_quit(DrawState* state);
+bool draw_init(DrawState** state);
+void draw_quit(DrawState* state);
 
-void gamedraw_draw(DrawState* state, Camera* cam);
+void draw_render(DrawState* state, Camera* cam);
 
 #endif

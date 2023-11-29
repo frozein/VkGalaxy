@@ -33,7 +33,7 @@ bool game_init(GameState** state)
 		return false;
 	}
 
-	if(!gamedraw_init(&s->drawState))
+	if(!draw_init(&s->drawState))
 	{
 		ERROR_LOG("failed to intialize rendering");
 		return false;
@@ -57,7 +57,7 @@ bool game_init(GameState** state)
 void game_quit(GameState* s)
 {
 	_game_camera_quit(s->cam);
-	gamedraw_quit(s->drawState);
+	draw_quit(s->drawState);
 	free(s);
 }
 
@@ -74,7 +74,7 @@ void game_main_loop(GameState* s)
 		lastTime = curTime;
 
 		_game_camera_update(s->cam, dt, s->drawState->instance->window);
-		gamedraw_draw(s->drawState, s->cam);
+		draw_render(s->drawState, s->cam);
 	
 		glfwPollEvents();
 	}

@@ -143,6 +143,30 @@ vulkancraft_shaders/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft_shaders.dir/build.make CMakeFiles/vulkancraft_shaders.dir/build
 .PHONY : vulkancraft_shaders/fast
 
+src/draw.o: src/draw.cpp.o
+.PHONY : src/draw.o
+
+# target to build an object file
+src/draw.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.o
+.PHONY : src/draw.cpp.o
+
+src/draw.i: src/draw.cpp.i
+.PHONY : src/draw.i
+
+# target to preprocess a source file
+src/draw.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.i
+.PHONY : src/draw.cpp.i
+
+src/draw.s: src/draw.cpp.s
+.PHONY : src/draw.s
+
+# target to generate assembly for a file
+src/draw.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.s
+.PHONY : src/draw.cpp.s
+
 src/game.o: src/game.cpp.o
 .PHONY : src/game.o
 
@@ -167,29 +191,29 @@ src/game.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.s
 .PHONY : src/game.cpp.s
 
-src/game_draw.o: src/game_draw.cpp.o
-.PHONY : src/game_draw.o
+src/libs/render.o: src/libs/render.cpp.o
+.PHONY : src/libs/render.o
 
 # target to build an object file
-src/game_draw.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game_draw.cpp.o
-.PHONY : src/game_draw.cpp.o
+src/libs/render.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.o
+.PHONY : src/libs/render.cpp.o
 
-src/game_draw.i: src/game_draw.cpp.i
-.PHONY : src/game_draw.i
+src/libs/render.i: src/libs/render.cpp.i
+.PHONY : src/libs/render.i
 
 # target to preprocess a source file
-src/game_draw.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game_draw.cpp.i
-.PHONY : src/game_draw.cpp.i
+src/libs/render.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.i
+.PHONY : src/libs/render.cpp.i
 
-src/game_draw.s: src/game_draw.cpp.s
-.PHONY : src/game_draw.s
+src/libs/render.s: src/libs/render.cpp.s
+.PHONY : src/libs/render.s
 
 # target to generate assembly for a file
-src/game_draw.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game_draw.cpp.s
-.PHONY : src/game_draw.cpp.s
+src/libs/render.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.s
+.PHONY : src/libs/render.cpp.s
 
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
@@ -215,30 +239,6 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
-src/render.o: src/render.cpp.o
-.PHONY : src/render.o
-
-# target to build an object file
-src/render.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/render.cpp.o
-.PHONY : src/render.cpp.o
-
-src/render.i: src/render.cpp.i
-.PHONY : src/render.i
-
-# target to preprocess a source file
-src/render.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/render.cpp.i
-.PHONY : src/render.cpp.i
-
-src/render.s: src/render.cpp.s
-.PHONY : src/render.s
-
-# target to generate assembly for a file
-src/render.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/render.cpp.s
-.PHONY : src/render.cpp.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -249,18 +249,18 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... vulkancraft_shaders"
 	@echo "... vulkancraft"
+	@echo "... src/draw.o"
+	@echo "... src/draw.i"
+	@echo "... src/draw.s"
 	@echo "... src/game.o"
 	@echo "... src/game.i"
 	@echo "... src/game.s"
-	@echo "... src/game_draw.o"
-	@echo "... src/game_draw.i"
-	@echo "... src/game_draw.s"
+	@echo "... src/libs/render.o"
+	@echo "... src/libs/render.i"
+	@echo "... src/libs/render.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
-	@echo "... src/render.o"
-	@echo "... src/render.i"
-	@echo "... src/render.s"
 .PHONY : help
 
 
