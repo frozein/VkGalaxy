@@ -25,5 +25,5 @@ void main()
 {
 	texPos = inTexPos;
 
-	gl_Position = viewProj * vec4(inPos, 1.0);
+	gl_Position = viewProj * model * vec4(inPos, 1.0);
 }

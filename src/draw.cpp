@@ -11,6 +11,20 @@ struct CameraGPU
 	qm::mat4 viewProj;
 };
 
+//parameters for grid rendering
+struct GridParamsVertGPU
+{
+	qm::mat4 model;
+};
+
+//parameters for grid rendering
+struct GridParamsFragGPU
+{
+	int32 numCells;
+	float thickness;
+	float scale;
+};
+
 //----------------------------------------------------------------------------//
 
 static bool _draw_create_depth_buffer(DrawState *state);
@@ -44,7 +58,7 @@ static void _draw_destroy_grid_descriptors(DrawState *state);
 
 //----------------------------------------------------------------------------//
 
-static void _draw_record_terrain_command_buffer(DrawState *s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
 //----------------------------------------------------------------------------//
 
@@ -175,7 +189,7 @@ void draw_render(DrawState *s, Camera *cam)
 	// RECORD GRID COMMAND BUFFER:
 	//---------------
 	vkResetCommandBuffer(s->commandBuffers[frameIndex], 0);
-	_draw_record_terrain_command_buffer(s, s->commandBuffers[frameIndex], frameIndex, imageIdx);
+	_draw_record_grid_command_buffer(s, cam, s->commandBuffers[frameIndex], frameIndex, imageIdx);
 
 	// SUBMIT COMMAND BUFFERS:
 	//---------------
@@ -630,10 +644,17 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 
 	// create push constsant ranges:
 	//---------------
-	VkPushConstantRange pushConstant = {};
-	pushConstant.offset = 0;
-	pushConstant.size = sizeof(qm::mat4);
-	pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	VkPushConstantRange vertPushConstant = {};
+	vertPushConstant.offset = 0;
+	vertPushConstant.size = sizeof(GridParamsVertGPU);
+	vertPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPushConstantRange fragPushConstant = {};
+	fragPushConstant.offset = sizeof(GridParamsVertGPU);
+	fragPushConstant.size = sizeof(GridParamsFragGPU);
+	fragPushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkPushConstantRange pushConstants[] = {vertPushConstant, fragPushConstant};
 
 	// create pipeline layout:
 	//---------------
@@ -641,8 +662,8 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutCreateInfo.setLayoutCount = 1;
 	pipelineLayoutCreateInfo.pSetLayouts = &s->gridPipelineDescriptorLayout;
-	pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-	pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+	pipelineLayoutCreateInfo.pushConstantRangeCount = 2;
+	pipelineLayoutCreateInfo.pPushConstantRanges = pushConstants;
 
 	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gridPipelineLayout) != VK_SUCCESS)
 	{
@@ -779,7 +800,7 @@ static void _draw_destroy_grid_descriptors(DrawState *s)
 
 //----------------------------------------------------------------------------//
 
-static void _draw_record_terrain_command_buffer(DrawState *s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	VkCommandBufferBeginInfo beginInfo = {};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -820,6 +841,8 @@ static void _draw_record_terrain_command_buffer(DrawState *s, VkCommandBuffer co
 	scissor.extent = s->instance->swapchainExtent;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+	//bind buffers:
+	//---------------
 	VkBuffer vertexBuffers[] = {s->gridVertexBuffer};
 	VkDeviceSize offsets[] = {0};
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -827,6 +850,36 @@ static void _draw_record_terrain_command_buffer(DrawState *s, VkCommandBuffer co
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipelineLayout, 0, 1, &s->gridDescriptorSets[frameIndex], 0, nullptr);
 
+	//send fragment stage params:
+	//---------------
+	int32 numCells = 16;
+	float thickness = 0.0125f;
+	float scale = 1.0f;
+
+	GridParamsFragGPU fragParams = {numCells, thickness, scale};
+	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
+
+	//send vertex stage params:
+	//---------------
+	int32 windowW, windowH;
+	glfwGetWindowSize(s->instance->window, &windowW, &windowH);	//TODO: FIGURE OUT WHY IT GETS CUT OFF WITH VERY TALL WINDOWS
+	float aspect = (float)windowW / (float)windowH;
+	if(aspect < 1.0f)
+		aspect = 1.0f / aspect;
+
+	float size = aspect * 5.0f * cam->scale;
+
+	qm::vec3 pos = cam->center;
+	for(int32 i = 0; i < 3; i++)
+		pos[i] -= fmodf(pos[i], size / numCells);
+
+	qm::mat4 model = qm::translate(pos) * qm::scale(qm::vec3(size, size, size));
+
+	GridParamsVertGPU vertParams = {model};
+	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GridParamsVertGPU), &vertParams);
+
+	//draw:
+	//---------------
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 	vkCmdEndRenderPass(commandBuffer);
 
