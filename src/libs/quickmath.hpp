@@ -1509,12 +1509,12 @@ inline mat4 orthographic(float left, float right, float bot, float top, float ne
 	mat4 result = mat4_identity();
 
 	result.m[0][0] = 2.0f / (right - left);
-	result.m[1][1] = 2.0f / (top - bot);
-	result.m[2][2] = 2.0f / (near - far);
+	result.m[1][1] = 2.0f / (bot - top);
+	result.m[2][2] = 1.0f / (far - near);
 
-	result.m[3][0] = (left + right) / (left - right);
-	result.m[3][1] = (bot  + top  ) / (bot  - top  );
-	result.m[3][2] = (near + far  ) / (near - far  );
+	result.m[3][0] = -(right + left) / (right - left);
+	result.m[3][1] = -(bot   + top ) / (bot   - top );
+	result.m[3][2] = -near / (far - near);
 
 	return result;
 }

@@ -22,7 +22,7 @@ struct GridParamsFragGPU
 {
 	int32 numCells;
 	float thickness;
-	float scale;
+	float scroll;
 };
 
 //----------------------------------------------------------------------------//
@@ -177,9 +177,9 @@ void draw_render(DrawState *s, Camera *cam)
 
 	float aspect = (float)windowW / (float)windowH;
 	if (aspect > 1.0f)
-		projection = qm::orthographic(-cam->scale * aspect, cam->scale * aspect, -cam->scale, cam->scale, cam->nearPlane, cam->farPlane);
+		projection = qm::orthographic(-cam->scale * aspect, cam->scale * aspect, -cam->scale, cam->scale, -1.0f, 1.0f);
 	else
-		projection = qm::orthographic(-cam->scale, cam->scale, -cam->scale / aspect, cam->scale / aspect, cam->nearPlane, cam->farPlane);
+		projection = qm::orthographic(-cam->scale, cam->scale, -cam->scale / aspect, cam->scale / aspect, -1.0f, 1.0f);
 
 	CameraGPU camBuffer;
 	camBuffer.viewProj = projection * view;
@@ -503,8 +503,8 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 	// compile:
 	//---------------
 	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32 *vertexCode = render_load_spirv("assets/spirv/vertex.vert.spv", &vertexCodeSize);
-	uint32 *fragmentCode = render_load_spirv("assets/spirv/fragment.frag.spv", &fragmentCodeSize);
+	uint32 *vertexCode = render_load_spirv("assets/spirv/grid.vert.spv", &vertexCodeSize);
+	uint32 *fragmentCode = render_load_spirv("assets/spirv/grid.frag.spv", &fragmentCodeSize);
 
 	// create shader modules:
 	//---------------
@@ -714,18 +714,18 @@ static void _draw_destroy_grid_pipeline(DrawState *s)
 
 static bool _draw_create_grid_vertex_buffer(DrawState *s)
 {
-	TerrainVertex tempVerts[4] = {{{-0.5f, 0.0f, -0.5f}, {0.0f, 0.0f}}, {{0.5f, 0.0f, -0.5f}, {1.0f, 0.0f}}, {{-0.5f, 0.0f, 0.5f}, {0.0f, 1.0f}}, {{0.5f, 0.0f, 0.5f}, {1.0f, 1.0f}}};
-	uint32 tempIndices[6] = {0, 1, 2, 1, 2, 3};
+	TerrainVertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
+	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
 
-	s->gridVertexBuffer = render_create_buffer(s->instance, sizeof(tempVerts),
+	s->gridVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
 												  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 												  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gridVertexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->gridVertexBuffer, sizeof(tempVerts), 0, tempVerts);
+	render_upload_with_staging_buffer(s->instance, s->gridVertexBuffer, sizeof(verts), 0, verts);
 
-	s->gridIndexBuffer = render_create_buffer(s->instance, sizeof(tempIndices),
+	s->gridIndexBuffer = render_create_buffer(s->instance, sizeof(indices),
 												 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 												 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gridIndexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->gridIndexBuffer, sizeof(tempIndices), 0, tempIndices);
+	render_upload_with_staging_buffer(s->instance, s->gridIndexBuffer, sizeof(indices), 0, indices);
 
 	return true;
 }
@@ -852,11 +852,11 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 
 	//send fragment stage params:
 	//---------------
-	int32 numCells = 16;
+	int32 numCells = 32;
 	float thickness = 0.0125f;
-	float scale = 1.0f;
+	float scroll = (cam->scale - powf(2.0f, roundf(log2f(cam->scale) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->scale) - 1.5f))) + 0.5f;
 
-	GridParamsFragGPU fragParams = {numCells, thickness, scale};
+	GridParamsFragGPU fragParams = {numCells, thickness, scroll};
 	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
 
 	//send vertex stage params:
@@ -867,7 +867,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	if(aspect < 1.0f)
 		aspect = 1.0f / aspect;
 
-	float size = aspect * 5.0f * cam->scale;
+	float size = aspect * 5.0f * powf(2.0f, roundf(log2f(cam->scale) + 0.5f));
 
 	qm::vec3 pos = cam->center;
 	for(int32 i = 0; i < 3; i++)

@@ -6,11 +6,17 @@ bool _game_camera_init(Camera** cam);
 void _game_camera_quit(Camera* cam);
 void _game_camera_update(Camera* cam, float dt, GLFWwindow* window);
 void _game_camera_cursor_moved(Camera* cam, float x, float y);
+void _game_camera_scroll(Camera* cam, float amt);
 
 //----------------------------------------------------------------------------//
 
 void _game_cursor_pos_callback(GLFWwindow* window, double x, double y);
 void _game_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+void _game_scroll_callback(GLFWwindow* window, double x, double y);
+
+//----------------------------------------------------------------------------//
+
+float _game_exp_scale_factor(float speed, float dt);
 
 //----------------------------------------------------------------------------//
 
@@ -50,6 +56,7 @@ bool game_init(GameState** state)
 	glfwSetWindowUserPointer(s->drawState->instance->window, s);
 	glfwSetCursorPosCallback(s->drawState->instance->window, _game_cursor_pos_callback);
 	glfwSetKeyCallback(s->drawState->instance->window, _game_key_callback);
+	glfwSetScrollCallback(s->drawState->instance->window, _game_scroll_callback);
 
 	return true;
 }
@@ -93,13 +100,13 @@ bool _game_camera_init(Camera** camera)
 		return false;
 	}
 
-	cam->up = {0.0f, 1.0f, 0.0f};
-	cam->nearPlane = -100.0f; //TODO: figure out why this only works with weird near/far plane values
-	cam->farPlane = 100.0f;
-	cam->scale = 5.0f;
+	cam->up = {0.0f, 0.0f, 1.0f};
+	cam->center = cam->targetCenter = {0.0f, 0.0f, 0.0f};
 
 	cam->dist = 10.0f;
-	cam->angle = 45.0f;
+	cam->angle = cam->targetAngle = 45.0f;
+
+	cam->scale = cam->targetScroll = cam->maxScroll = 16000.0f;
 
 	return true;
 }
@@ -111,28 +118,32 @@ void _game_camera_quit(Camera* cam)
 
 void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 {
-	float camSpeed = 5.0f * dt;
-	float angleSpeed = 30.0f * dt;
+	float camSpeed = 2.0f * dt * cam->scale;
+	float angleSpeed = 45.0f * dt;
 
 	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
 
 	qm::vec3 forward = qm::vec3(forward4.x, forward4.y, forward4.z);
 	qm::vec3 side = qm::vec3(side4.x, side4.y, side4.z);
 
 	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		cam->center = cam->center + (forward * camSpeed);
+		cam->targetCenter = cam->targetCenter + (forward * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		cam->center = cam->center - (forward * camSpeed);
+		cam->targetCenter = cam->targetCenter - (forward * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		cam->center = cam->center + (side * camSpeed);
+		cam->targetCenter = cam->targetCenter - (side * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		cam->center = cam->center - (side * camSpeed);
+		cam->targetCenter = cam->targetCenter + (side * camSpeed);
 
 	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		cam->angle -= angleSpeed;
+		cam->targetAngle += angleSpeed;
 	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-		cam->angle += angleSpeed;
+		cam->targetAngle -= angleSpeed;
+
+	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
+	cam->scale += (cam->targetScroll - cam->scale) * _game_exp_scale_factor(0.99f, dt);
+	cam->angle += (cam->targetAngle - cam->angle) * _game_exp_scale_factor(0.99f, dt);
 
 	qm::vec4 toPos = qm::rotate(side, 30.0f) * qm::vec4(forward, 1.0f);
 	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
@@ -140,32 +151,18 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 
 void _game_camera_cursor_moved(Camera* cam, float x, float y)
 {
-	/*static float lastX = 0.0f, lastY = 0.0f;
+
+}
+
+void _game_camera_scroll(Camera* cam, float amt)
+{
+	cam->targetScroll += 0.1f * cam->targetScroll * amt;
+
+	if(cam->targetScroll < 1.0f)
+		cam->targetScroll = 1.0f;
 	
-	static bool firstMouse = true;
-	if(firstMouse)
-	{
-		lastX = x;
-        lastY = y;
-        firstMouse = false;
-	}
-
-	float offsetX = x - lastX;
-	float offsetY = lastY - y;
-	lastX = x;
-	lastY = y;
-
-	const float sens = 0.05f;
-	offsetX *= sens;
-	offsetY *= sens;
-
-	cam->orient.y -= offsetX;
-	cam->orient.x -= offsetY;
-
-	if(cam->orient.x > 89.0f)
-		cam->orient.x = 89.0f;
-	if(cam->orient.x < -89.0f)
-		cam->orient.x = -89.0f;*/
+	if(cam->targetScroll > cam->maxScroll)
+		cam->targetScroll = cam->maxScroll;
 }
 
 //----------------------------------------------------------------------------//
@@ -181,6 +178,21 @@ void _game_key_callback(GLFWwindow* window, int key, int scancode, int action, i
 {
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
+void _game_scroll_callback(GLFWwindow* window, double x, double y)
+{
+	GameState* s = (GameState*)glfwGetWindowUserPointer(window);
+
+	if(y != 0.0)
+		_game_camera_scroll(s->cam, (float)y);
+}
+
+//----------------------------------------------------------------------------//
+
+float _game_exp_scale_factor(float speed, float dt)
+{
+	return 1.0f - powf(speed, 1000.0f * dt);
 }
 
 //----------------------------------------------------------------------------//
