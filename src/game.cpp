@@ -103,10 +103,11 @@ bool _game_camera_init(Camera** camera)
 	cam->up = {0.0f, 0.0f, 1.0f};
 	cam->center = cam->targetCenter = {0.0f, 0.0f, 0.0f};
 
-	cam->dist = 10.0f;
+	cam->dist = cam->targetDist = cam->maxDist = 16000.0f;
 	cam->angle = cam->targetAngle = 45.0f;
 
-	cam->scale = cam->targetScroll = cam->maxScroll = 16000.0f;
+	cam->fov = 45.0f;
+	cam->nearPlane = 0.1f;
 
 	return true;
 }
@@ -118,7 +119,7 @@ void _game_camera_quit(Camera* cam)
 
 void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 {
-	float camSpeed = 2.0f * dt * cam->scale;
+	float camSpeed = 1.0f * dt * cam->dist;
 	float angleSpeed = 45.0f * dt;
 
 	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
@@ -128,9 +129,9 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 	qm::vec3 side = qm::vec3(side4.x, side4.y, side4.z);
 
 	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		cam->targetCenter = cam->targetCenter + (forward * camSpeed);
-	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 		cam->targetCenter = cam->targetCenter - (forward * camSpeed);
+	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		cam->targetCenter = cam->targetCenter + (forward * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
 		cam->targetCenter = cam->targetCenter - (side * camSpeed);
 	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
@@ -142,10 +143,10 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 		cam->targetAngle -= angleSpeed;
 
 	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
-	cam->scale += (cam->targetScroll - cam->scale) * _game_exp_scale_factor(0.99f, dt);
+	cam->dist += (cam->targetDist - cam->dist) * _game_exp_scale_factor(0.99f, dt);
 	cam->angle += (cam->targetAngle - cam->angle) * _game_exp_scale_factor(0.99f, dt);
 
-	qm::vec4 toPos = qm::rotate(side, 30.0f) * qm::vec4(forward, 1.0f);
+	qm::vec4 toPos = qm::rotate(side, 45.0f) * qm::vec4(forward, 1.0f);
 	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
@@ -156,13 +157,13 @@ void _game_camera_cursor_moved(Camera* cam, float x, float y)
 
 void _game_camera_scroll(Camera* cam, float amt)
 {
-	cam->targetScroll += 0.1f * cam->targetScroll * amt;
+	cam->targetDist += 0.1f * cam->targetDist * amt;
 
-	if(cam->targetScroll < 1.0f)
-		cam->targetScroll = 1.0f;
+	if(cam->targetDist < 1.0f)
+		cam->targetDist = 1.0f;
 	
-	if(cam->targetScroll > cam->maxScroll)
-		cam->targetScroll = cam->maxScroll;
+	if(cam->targetDist > cam->maxDist)
+		cam->targetDist = cam->maxDist;
 }
 
 //----------------------------------------------------------------------------//

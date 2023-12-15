@@ -40,12 +40,6 @@ void main()
 	if(on_grid(gridPos, thickness))
 		color += gridCol * (2.0 * scroll - 1.0);
 
-	/*if(distance(texPos - 0.5, vec2(0.0)) < 0.01)
-	{
-		outColor = vec4(1.0, 0.0, 0.0, 1.0);
-		return;
-	}*/
-
 	color = min(color, gridCol);
 	outColor = vec4(color, 1.0);
 }

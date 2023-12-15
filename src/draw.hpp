@@ -51,19 +51,16 @@ struct DrawState
 
 //----------------------------------------------------------------------------//
 
-struct TerrainVertex
+struct Vertex
 {
 	qm::vec3 pos;
 	qm::vec2 texCoord;
 };
 
-struct TerrainMesh
+struct Star
 {
-	uint64 id;
-	qm::vec3 pos;
-
-	uint64 vertexCount;
-	TerrainVertex* mesh;
+	qm::mat4 model;
+	qm::vec4 color;
 };
 
 //----------------------------------------------------------------------------//
@@ -75,15 +72,15 @@ struct Camera
 	qm::vec3 center;
 	qm::vec3 targetCenter;
 
-	float scale;
-	float targetScroll;
-	float maxScroll;
-
-	//for game use only:
 	float dist;
+	float targetDist;
+	float maxDist;
 
 	float angle;
 	float targetAngle;
+
+	float fov;
+	float nearPlane;
 };
 
 //----------------------------------------------------------------------------//

@@ -24,9 +24,5 @@ layout(push_constant) uniform Model
 void main() 
 {
 	texPos = inTexPos;
-
-	vec4 pos = viewProj * model * vec4(inPos, 1.0);
-	pos.z = 0.0;
-
-	gl_Position = pos;
+	gl_Position = viewProj * model * vec4(inPos, 1.0);
 }

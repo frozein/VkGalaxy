@@ -174,12 +174,7 @@ void draw_render(DrawState *s, Camera *cam)
 
 	qm::mat4 view, projection;
 	view = qm::lookat(cam->pos, cam->center, cam->up);
-
-	float aspect = (float)windowW / (float)windowH;
-	if (aspect > 1.0f)
-		projection = qm::orthographic(-cam->scale * aspect, cam->scale * aspect, -cam->scale, cam->scale, -1.0f, 1.0f);
-	else
-		projection = qm::orthographic(-cam->scale, cam->scale, -cam->scale / aspect, cam->scale / aspect, -1.0f, 1.0f);
+	projection = qm::perspective(cam->fov, (float)windowW / (float)windowH, cam->nearPlane, 2.0f * cam->dist);
 
 	CameraGPU camBuffer;
 	camBuffer.viewProj = projection * view;
@@ -544,7 +539,7 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 	//---------------
 	VkVertexInputBindingDescription vertexBindingDescription = {};
 	vertexBindingDescription.binding = 0;
-	vertexBindingDescription.stride = sizeof(TerrainVertex);
+	vertexBindingDescription.stride = sizeof(Vertex);
 	vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 	const uint32 vertexAttributeCount = 2;
@@ -554,13 +549,13 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 	vertexAttributeDescriptions[0].binding = 0;
 	vertexAttributeDescriptions[0].location = 0;
 	vertexAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	vertexAttributeDescriptions[0].offset = offsetof(TerrainVertex, pos);
+	vertexAttributeDescriptions[0].offset = offsetof(Vertex, pos);
 
 	// tex coord:
 	vertexAttributeDescriptions[1].binding = 0;
 	vertexAttributeDescriptions[1].location = 1;
 	vertexAttributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	vertexAttributeDescriptions[1].offset = offsetof(TerrainVertex, texCoord);
+	vertexAttributeDescriptions[1].offset = offsetof(Vertex, texCoord);
 
 	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
 	vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -714,7 +709,7 @@ static void _draw_destroy_grid_pipeline(DrawState *s)
 
 static bool _draw_create_grid_vertex_buffer(DrawState *s)
 {
-	TerrainVertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
+	Vertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
 	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
 
 	s->gridVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
@@ -854,7 +849,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	//---------------
 	int32 numCells = 32;
 	float thickness = 0.0125f;
-	float scroll = (cam->scale - powf(2.0f, roundf(log2f(cam->scale) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->scale) - 1.5f))) + 0.5f;
+	float scroll = (cam->dist - powf(2.0f, roundf(log2f(cam->dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->dist) - 1.5f))) + 0.5f;
 
 	GridParamsFragGPU fragParams = {numCells, thickness, scroll};
 	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
@@ -867,7 +862,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	if(aspect < 1.0f)
 		aspect = 1.0f / aspect;
 
-	float size = aspect * 5.0f * powf(2.0f, roundf(log2f(cam->scale) + 0.5f));
+	float size = aspect * 3.0f * powf(2.0f, roundf(log2f(cam->dist) + 0.5f));
 
 	qm::vec3 pos = cam->center;
 	for(int32 i = 0; i < 3; i++)
