@@ -158,6 +158,9 @@ void _game_camera_cursor_moved(Camera* cam, float x, float y)
 void _game_camera_scroll(Camera* cam, float amt)
 {
 	cam->targetDist += 0.1f * cam->targetDist * amt;
+	cam->targetDist = roundf(cam->targetDist * 100.0f) / 100.0f;
+
+	printf("%f\n", cam->targetDist);
 
 	if(cam->targetDist < 1.0f)
 		cam->targetDist = 1.0f;

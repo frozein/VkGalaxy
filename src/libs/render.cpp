@@ -328,7 +328,8 @@ void render_transition_image_layout(RenderInstance* inst, VkImage image, VkForma
 
 uint32* render_load_spirv(const char* path, uint64* size)
 {
-	FILE* fptr = fopen(path, "rb");
+	FILE* fptr;
+	fopen_s(&fptr, path, "rb");
 	if(!fptr)
 	{
 		ERROR_LOG("failed to open spirv file");
@@ -440,10 +441,10 @@ static bool _render_create_vk_instance(RenderInstance* inst, const char* name)
 	VkExtensionProperties* extensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
 	vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
 
-	for(int32 i = 0; i < requiredExtensionCount; i++)
+	for(uint32 i = 0; i < requiredExtensionCount; i++)
 	{
 		bool found = false;
-		for(int32 j = 0; j < extensionCount; j++)
+		for(uint32 j = 0; j < extensionCount; j++)
 			if(strcmp(requiredExtensions[i], extensions[j].extensionName) == 0)
 			{
 				found = true;
@@ -475,10 +476,10 @@ static bool _render_create_vk_instance(RenderInstance* inst, const char* name)
 		vkEnumerateInstanceLayerProperties(&supportedLayerCount, supportedLayers);
 
 		bool found = false;
-		for(int32 i = 0; i < requiredLayerCount; i++)
+		for(uint32 i = 0; i < requiredLayerCount; i++)
 		{
 			bool found = false;
-			for(int32 j = 0; j < supportedLayerCount; j++)
+			for(uint32 j = 0; j < supportedLayerCount; j++)
 				if(strcmp(requiredLayers[i], supportedLayers[j].layerName) == 0)
 				{
 					found = true;
@@ -606,7 +607,7 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 	vkEnumeratePhysicalDevices(inst->instance, &deviceCount, devices);
 
 	int32 maxScore = -1;
-	for(int32 i = 0; i < deviceCount; i++)
+	for(uint32 i = 0; i < deviceCount; i++)
 	{
 		int32 score = 0;
 
@@ -627,7 +628,7 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 		VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
 		vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &queueFamilyCount, queueFamilies);
 
-		for(int32 j = 0; j < queueFamilyCount; j++)
+		for(uint32 j = 0; j < queueFamilyCount; j++)
 		{
 			if(queueFamilies[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) //TODO: see if there is a way to determine most optimal queue families
 				graphicsFamilyIdx = j;
@@ -655,10 +656,10 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 		VkExtensionProperties* extensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
 		vkEnumerateDeviceExtensionProperties(devices[i], NULL, &extensionCount, extensions);
 
-		for(int32 j = 0; j < REQUIRED_DEVICE_EXTENSION_COUNT; j++)
+		for(uint32 j = 0; j < REQUIRED_DEVICE_EXTENSION_COUNT; j++)
 		{
 			bool found = false;
-			for(int32 k = 0; k < extensionCount; k++)
+			for(uint32 k = 0; k < extensionCount; k++)
 				if(strcmp(REQUIRED_DEVICE_EXTENSIONS[j], extensions[k].extensionName) == 0)
 				{
 					found = true;
@@ -744,7 +745,7 @@ static bool _render_create_device(RenderInstance* inst)
 
 	f32 priority = 1.0f;
 	VkDeviceQueueCreateInfo queueInfos[2];
-	for(int32 i = 0; i < queueCount; i++)
+	for(uint32 i = 0; i < queueCount; i++)
 	{
 		VkDeviceQueueCreateInfo queueInfo = {};
 		queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -807,7 +808,7 @@ static bool _render_create_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 	vkGetPhysicalDeviceSurfaceFormatsKHR(inst->physicalDevice, inst->surface, &formatCount, supportedFormats);
 
 	VkSurfaceFormatKHR format = supportedFormats[0];
-	for(int32 i = 0; i < formatCount; i++)
+	for(uint32 i = 0; i < formatCount; i++)
 		if(supportedFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB && supportedFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 		{
 			format = supportedFormats[i];
@@ -822,7 +823,7 @@ static bool _render_create_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 	vkGetPhysicalDeviceSurfacePresentModesKHR(inst->physicalDevice, inst->surface, &presentModeCount, supportedPresentModes);
 	
 	VkPresentModeKHR presentMode = supportedPresentModes[0];
-	for(int32 i = 0; i < presentModeCount; i++)
+	for(uint32 i = 0; i < presentModeCount; i++)
 		if(supportedPresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
 			presentMode = supportedPresentModes[i];
 
@@ -899,7 +900,7 @@ static bool _render_create_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 	inst->swapchainImageViews = (VkImageView*)malloc(inst->swapchainImageCount * sizeof(VkImageView));
 	vkGetSwapchainImagesKHR(inst->device, inst->swapchain, &inst->swapchainImageCount, inst->swapchainImages);
 
-	for(int32 i = 0; i < inst->swapchainImageCount; i++)
+	for(uint32 i = 0; i < inst->swapchainImageCount; i++)
 		inst->swapchainImageViews[i] = render_create_image_view(inst, inst->swapchainImages[i], inst->swapchainFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
 	return true;
@@ -909,7 +910,7 @@ static void _render_destroy_swapchain(RenderInstance* inst)
 {
 	MSG_LOG("destroying Vulkan swapchain...");
 
-	for(int32 i = 0; i < inst->swapchainImageCount; i++)
+	for(uint32 i = 0; i < inst->swapchainImageCount; i++)
 		render_destroy_image_view(inst, inst->swapchainImageViews[i]);
 	
 	free(inst->swapchainImages);
@@ -984,7 +985,7 @@ static uint32 _render_find_memory_type(RenderInstance* inst, uint32 typeFilter, 
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(inst->physicalDevice, &memProperties);
 
-	for(int32 i = 0; i < memProperties.memoryTypeCount; i++)
+	for(uint32 i = 0; i < memProperties.memoryTypeCount; i++)
 		if((typeFilter & (1 << i)) && ((memProperties.memoryTypes[i].propertyFlags & properties) == properties))
 			return i;
 	

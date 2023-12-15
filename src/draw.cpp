@@ -348,7 +348,7 @@ static bool _draw_create_framebuffers(DrawState *s)
 	s->framebufferCount = s->instance->swapchainImageCount;
 	s->framebuffers = (VkFramebuffer *)malloc(s->framebufferCount * sizeof(VkFramebuffer));
 
-	for (int32 i = 0; i < s->framebufferCount; i++)
+	for (uint32 i = 0; i < s->framebufferCount; i++)
 	{
 		VkImageView attachments[2] = {s->instance->swapchainImageViews[i], s->finalDepthView};
 
@@ -373,7 +373,7 @@ static bool _draw_create_framebuffers(DrawState *s)
 
 static void _draw_destroy_framebuffers(DrawState *s)
 {
-	for (int32 i = 0; i < s->framebufferCount; i++)
+	for (uint32 i = 0; i < s->framebufferCount; i++)
 		vkDestroyFramebuffer(s->instance->device, s->framebuffers[i], NULL);
 
 	free(s->framebuffers);
@@ -878,7 +878,8 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 	vkCmdEndRenderPass(commandBuffer);
 
-	vkEndCommandBuffer(commandBuffer) != VK_SUCCESS;
+	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+		ERROR_LOG("failed to end command buffer");
 }
 
 //----------------------------------------------------------------------------//
