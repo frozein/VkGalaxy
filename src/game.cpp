@@ -2,11 +2,17 @@
 
 //----------------------------------------------------------------------------//
 
-bool _game_camera_init(Camera** cam);
-void _game_camera_quit(Camera* cam);
-void _game_camera_update(Camera* cam, float dt, GLFWwindow* window);
-void _game_camera_cursor_moved(Camera* cam, float x, float y);
-void _game_camera_scroll(Camera* cam, float amt);
+#define CAMERA_FOV 45.0f
+#define CAMERA_MAX_DIST 16000.0f
+#define CAMERA_MIN_TILT 15.0f
+#define CAMERA_MAX_TILT 89.0f
+
+//----------------------------------------------------------------------------//
+
+bool _game_camera_init(GameCamera* cam);
+void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window);
+void _game_camera_cursor_moved(GameCamera* cam, float x, float y);
+void _game_camera_scroll(GameCamera* cam, float amt);
 
 //----------------------------------------------------------------------------//
 
@@ -63,7 +69,6 @@ bool game_init(GameState** state)
 
 void game_quit(GameState* s)
 {
-	_game_camera_quit(s->cam);
 	draw_quit(s->drawState);
 	free(s);
 }
@@ -80,12 +85,16 @@ void game_main_loop(GameState* s)
 		float dt = curTime - lastTime;
 		lastTime = curTime;
 
-		_game_camera_update(s->cam, dt, s->drawState->instance->window);
+		_game_camera_update(&s->cam, dt, s->drawState->instance->window);
 
 		DrawParams drawParams;
-		drawParams.cam = s->cam;
+		drawParams.cam.pos = s->cam.pos;
+		drawParams.cam.up = s->cam.up;
+		drawParams.cam.target = s->cam.center;
+		drawParams.cam.dist = s->cam.dist;
+		drawParams.cam.fov = CAMERA_FOV;
 		drawParams.numParticles = 1;
-		draw_render(s->drawState, drawParams);
+		draw_render(s->drawState, &drawParams);
 	
 		glfwPollEvents();
 	}
@@ -93,39 +102,25 @@ void game_main_loop(GameState* s)
 
 //----------------------------------------------------------------------------//
 
-bool _game_camera_init(Camera** camera)
+bool _game_camera_init(GameCamera* cam)
 {
-	*camera = (Camera*)malloc(sizeof(Camera));
-	Camera* cam = *camera;
-
 	if(!cam)
 	{
-		ERROR_LOG("failed to allocate Camera struct");
+		ERROR_LOG("failed to allocate GameCamera struct");
 		return false;
 	}
 
 	cam->up = {0.0f, 1.0f, 0.0f};
 	cam->center = cam->targetCenter = {0.0f, 0.0f, 0.0f};
 
-	cam->dist = cam->targetDist = cam->maxDist = 16000.0f;
+	cam->dist = cam->targetDist = CAMERA_MAX_DIST;
 	cam->angle = cam->targetAngle = 45.0f;
-
-	cam->minTilt = 15.0f;
-	cam->maxTilt = 89.0f;
 	cam->tilt = cam->targetTilt = 45.0f;
-
-	cam->fov = 45.0f;
-	cam->nearPlane = 0.1f;
 
 	return true;
 }
 
-void _game_camera_quit(Camera* cam)
-{
-	free(cam);
-}
-
-void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
+void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window)
 {
 	float camSpeed = 1.0f * dt * cam->dist;
 	float angleSpeed = 45.0f * dt;
@@ -153,9 +148,9 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 		cam->targetAngle += angleSpeed;
 
 	if(glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-		cam->targetTilt = fminf(cam->targetTilt + tiltSpeed, cam->maxTilt);
+		cam->targetTilt = fminf(cam->targetTilt + tiltSpeed, CAMERA_MAX_TILT);
 	if(glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
-		cam->targetTilt = fmaxf(cam->targetTilt - tiltSpeed, cam->minTilt);
+		cam->targetTilt = fmaxf(cam->targetTilt - tiltSpeed, CAMERA_MIN_TILT);
 
 	cam->targetCenter = cam->targetCenter + camSpeed * qm::normalize(camVel);
 
@@ -168,12 +163,12 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
-void _game_camera_cursor_moved(Camera* cam, float x, float y)
+void _game_camera_cursor_moved(GameCamera* cam, float x, float y)
 {
 
 }
 
-void _game_camera_scroll(Camera* cam, float amt)
+void _game_camera_scroll(GameCamera* cam, float amt)
 {
 	cam->targetDist -= 0.1f * cam->targetDist * amt;
 	cam->targetDist = roundf(cam->targetDist * 100.0f) / 100.0f;
@@ -181,8 +176,8 @@ void _game_camera_scroll(Camera* cam, float amt)
 	if(cam->targetDist < 1.0f)
 		cam->targetDist = 1.0f;
 	
-	if(cam->targetDist > cam->maxDist)
-		cam->targetDist = cam->maxDist;
+	if(cam->targetDist > CAMERA_MAX_DIST)
+		cam->targetDist = CAMERA_MAX_DIST;
 }
 
 //----------------------------------------------------------------------------//
@@ -191,7 +186,7 @@ void _game_cursor_pos_callback(GLFWwindow* window, double x, double y)
 {
 	GameState* s = (GameState*)glfwGetWindowUserPointer(window);
 
-	_game_camera_cursor_moved(s->cam, (float)x, (float)y);
+	_game_camera_cursor_moved(&s->cam, (float)x, (float)y);
 }
 
 void _game_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -205,7 +200,7 @@ void _game_scroll_callback(GLFWwindow* window, double x, double y)
 	GameState* s = (GameState*)glfwGetWindowUserPointer(window);
 
 	if(y != 0.0)
-		_game_camera_scroll(s->cam, (float)y);
+		_game_camera_scroll(&s->cam, (float)y);
 }
 
 //----------------------------------------------------------------------------//

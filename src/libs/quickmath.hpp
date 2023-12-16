@@ -1497,8 +1497,8 @@ inline mat4 perspective(float fov, float aspect, float near, float far)
 
 	result.m[0][0] = near / right;
 	result.m[1][1] = near / top;
-	result.m[2][2] = -(far + near) / (far - near);
-	result.m[3][2] = -2.0f * far * near / (far - near);
+	result.m[2][2] = far == INFINITY ? -1.0f : -(far + near) / (far - near);
+	result.m[3][2] = far == INFINITY ? -2.0f * near : -2.0f * far * near / (far - near);
 	result.m[2][3] = -1.0f;
 
 	return result;

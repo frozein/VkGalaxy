@@ -82,33 +82,20 @@ struct GalaxyParticle
 
 //----------------------------------------------------------------------------//
 
-struct Camera
-{
-	qm::vec3 pos;
-	qm::vec3 up;
-	qm::vec3 center;
-	qm::vec3 targetCenter;
-
-	float dist;
-	float targetDist;
-	float maxDist;
-
-	float minTilt, maxTilt;
-	float targetTilt;
-	float tilt;
-
-	float angle;
-	float targetAngle;
-
-	float fov;
-	float nearPlane;
-};
-
 struct DrawParams
 {
-	Camera* cam;
+	struct
+	{
+		qm::vec3 pos;
+		qm::vec3 up;
+		qm::vec3 target;
 
-	uint64 numParticles;
+		float dist;
+
+		float fov;
+	} cam;
+
+	uint32 numParticles;
 	qm::mat4* particleTransforms;
 };
 
@@ -117,6 +104,6 @@ struct DrawParams
 bool draw_init(DrawState** state);
 void draw_quit(DrawState* state);
 
-void draw_render(DrawState* state, DrawParams params);
+void draw_render(DrawState* state, DrawParams* params);
 
 #endif

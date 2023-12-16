@@ -77,9 +77,9 @@ static void _draw_destroy_gparticle_descriptors(DrawState *state);
 static void _draw_start_command_buffer(DrawState *s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 static void _draw_end_command_buffer(VkCommandBuffer commandBuffer);
 
-static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_grid_command_buffer(DrawState *s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
-static void _draw_record_gparticle_command_buffer(DrawState *s, uint64 numParticles, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_gparticle_command_buffer(DrawState *s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
 //----------------------------------------------------------------------------//
 
@@ -182,7 +182,7 @@ void draw_quit(DrawState *s)
 
 //----------------------------------------------------------------------------//
 
-void draw_render(DrawState *s, DrawParams params)
+void draw_render(DrawState *s, DrawParams* params)
 {
 	static uint32 frameIdx = 0;
 
@@ -212,8 +212,8 @@ void draw_render(DrawState *s, DrawParams params)
 	glfwGetWindowSize(s->instance->window, &windowW, &windowH);
 
 	qm::mat4 view, projection;
-	view = qm::lookat(params.cam->pos, params.cam->center, params.cam->up);
-	projection = qm::perspective(params.cam->fov, (float)windowW / (float)windowH, params.cam->nearPlane, 2.0f * params.cam->dist);
+	view = qm::lookat(params->cam.pos, params->cam.target, params->cam.up);
+	projection = qm::perspective(params->cam.fov, (float)windowW / (float)windowH, 0.1f, INFINITY);
 
 	CameraGPU camBuffer;
 	camBuffer.view = view;
@@ -228,8 +228,8 @@ void draw_render(DrawState *s, DrawParams params)
 
 	_draw_start_command_buffer(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
-	_draw_record_grid_command_buffer(s, params.cam, s->commandBuffers[frameIdx], frameIdx, imageIdx);
-	_draw_record_gparticle_command_buffer(s, params.numParticles, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_grid_command_buffer(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_gparticle_command_buffer(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
 	_draw_end_command_buffer(s->commandBuffers[frameIdx]);
 
@@ -1232,7 +1232,7 @@ static void _draw_end_command_buffer(VkCommandBuffer commandBuffer)
 		ERROR_LOG("failed to end command buffer");
 }
 
-static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_grid_command_buffer(DrawState *s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline);
 
@@ -1255,9 +1255,9 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	if(aspect < 1.0f)
 		aspect = 1.0f / aspect;
 
-	float size = aspect * powf(2.0f, roundf(log2f(cam->dist) + 0.5f));
+	float size = aspect * powf(2.0f, roundf(log2f(params->cam.dist) + 0.5f));
 
-	qm::vec3 pos = cam->center;
+	qm::vec3 pos = params->cam.target;
 	for(int32 i = 0; i < 3; i++)
 		pos[i] -= fmodf(pos[i], size / numCells);
 
@@ -1269,8 +1269,8 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	//send fragment stage params:
 	//---------------
 	float thickness = 0.0125f;
-	float scroll = (cam->dist - powf(2.0f, roundf(log2f(cam->dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->dist) - 1.5f))) + 0.5f;
-	qm::vec3 offset3 = (cam->center - pos) / size;
+	float scroll = (params->cam.dist - powf(2.0f, roundf(log2f(params->cam.dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(params->cam.dist) - 1.5f))) + 0.5f;
+	qm::vec3 offset3 = (params->cam.target - pos) / size;
 	qm::vec2 offset = qm::vec2(offset3.x, offset3.z);
 
 	GridParamsFragGPU fragParams = {offset, numCells, thickness, scroll};
@@ -1281,7 +1281,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 }
 
-static void _draw_record_gparticle_command_buffer(DrawState *s, uint64 numParticles, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_gparticle_command_buffer(DrawState *s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gparticlePipeline);
 
@@ -1297,7 +1297,7 @@ static void _draw_record_gparticle_command_buffer(DrawState *s, uint64 numPartic
 
 	//draw:
 	//---------------
-	vkCmdDrawIndexed(commandBuffer, 6, numParticles, 0, 0, 0);
+	vkCmdDrawIndexed(commandBuffer, 6, params->numParticles, 0, 0, 0);
 }
 
 //----------------------------------------------------------------------------//
