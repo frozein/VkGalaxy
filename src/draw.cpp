@@ -22,6 +22,7 @@ struct GridParamsVertGPU
 //parameters for grid rendering
 struct GridParamsFragGPU
 {
+	qm::vec2 offset;
 	int32 numCells;
 	float thickness;
 	float scroll;
@@ -1244,14 +1245,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipelineLayout, 0, 1, &s->gridDescriptorSets[frameIndex], 0, nullptr);
 
-	//send fragment stage params:
-	//---------------
-	int32 numCells = 32;
-	float thickness = 0.0125f;
-	float scroll = (cam->dist - powf(2.0f, roundf(log2f(cam->dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->dist) - 1.5f))) + 0.5f;
-
-	GridParamsFragGPU fragParams = {numCells, thickness, scroll};
-	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
+	int32 numCells = 16;
 
 	//send vertex stage params:
 	//---------------
@@ -1261,7 +1255,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	if(aspect < 1.0f)
 		aspect = 1.0f / aspect;
 
-	float size = aspect * 3.0f * powf(2.0f, roundf(log2f(cam->dist) + 0.5f));
+	float size = aspect * powf(2.0f, roundf(log2f(cam->dist) + 0.5f));
 
 	qm::vec3 pos = cam->center;
 	for(int32 i = 0; i < 3; i++)
@@ -1271,6 +1265,16 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 
 	GridParamsVertGPU vertParams = {model};
 	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GridParamsVertGPU), &vertParams);
+
+	//send fragment stage params:
+	//---------------
+	float thickness = 0.0125f;
+	float scroll = (cam->dist - powf(2.0f, roundf(log2f(cam->dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->dist) - 1.5f))) + 0.5f;
+	qm::vec3 offset3 = (cam->center - pos) / size;
+	qm::vec2 offset = qm::vec2(offset3.x, offset3.y);
+
+	GridParamsFragGPU fragParams = {offset, numCells, thickness, scroll};
+	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
 
 	//draw:
 	//---------------

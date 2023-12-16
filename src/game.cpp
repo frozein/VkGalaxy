@@ -132,19 +132,22 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 	qm::vec3 forward = qm::vec3(forward4.x, forward4.y, forward4.z);
 	qm::vec3 side = qm::vec3(side4.x, side4.y, side4.z);
 
+	qm::vec3 camVel(0.0f, 0.0f, 0.0f);
 	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		cam->targetCenter = cam->targetCenter - (forward * camSpeed);
+		camVel = camVel - forward;
 	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		cam->targetCenter = cam->targetCenter + (forward * camSpeed);
+		camVel = camVel + forward;
 	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		cam->targetCenter = cam->targetCenter - (side * camSpeed);
+		camVel = camVel - side;
 	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		cam->targetCenter = cam->targetCenter + (side * camSpeed);
+		camVel = camVel + side;
 
 	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 		cam->targetAngle -= angleSpeed;
 	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
 		cam->targetAngle += angleSpeed;
+
+	cam->targetCenter = cam->targetCenter + camSpeed * qm::normalize(camVel);
 
 	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
 	cam->dist += (cam->targetDist - cam->dist) * _game_exp_scale_factor(0.99f, dt);
