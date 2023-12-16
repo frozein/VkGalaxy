@@ -81,7 +81,11 @@ void game_main_loop(GameState* s)
 		lastTime = curTime;
 
 		_game_camera_update(s->cam, dt, s->drawState->instance->window);
-		draw_render(s->drawState, s->cam);
+
+		DrawParams drawParams;
+		drawParams.cam = s->cam;
+		drawParams.numParticles = 1;
+		draw_render(s->drawState, drawParams);
 	
 		glfwPollEvents();
 	}
@@ -138,15 +142,15 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 		cam->targetCenter = cam->targetCenter + (side * camSpeed);
 
 	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		cam->targetAngle += angleSpeed;
-	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
 		cam->targetAngle -= angleSpeed;
+	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+		cam->targetAngle += angleSpeed;
 
 	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
 	cam->dist += (cam->targetDist - cam->dist) * _game_exp_scale_factor(0.99f, dt);
 	cam->angle += (cam->targetAngle - cam->angle) * _game_exp_scale_factor(0.99f, dt);
 
-	qm::vec4 toPos = qm::rotate(side, 45.0f) * qm::vec4(forward, 1.0f);
+	qm::vec4 toPos = qm::rotate(side, -45.0f) * qm::vec4(forward, 1.0f);
 	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
@@ -157,10 +161,8 @@ void _game_camera_cursor_moved(Camera* cam, float x, float y)
 
 void _game_camera_scroll(Camera* cam, float amt)
 {
-	cam->targetDist += 0.1f * cam->targetDist * amt;
+	cam->targetDist -= 0.1f * cam->targetDist * amt;
 	cam->targetDist = roundf(cam->targetDist * 100.0f) / 100.0f;
-
-	printf("%f\n", cam->targetDist);
 
 	if(cam->targetDist < 1.0f)
 		cam->targetDist = 1.0f;

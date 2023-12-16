@@ -1,18 +1,18 @@
 #version 450
 
-layout(location = 0) in vec2 texPos;
+layout(location = 0) in vec2 a_texPos;
 
 //----------------------------------------------------------------------------//
 
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 o_color;
 
 //----------------------------------------------------------------------------//
 
 layout(push_constant) uniform Params
 {
-	layout(offset = 64) int numCells;
-	float thickness;
-	float scroll;
+	layout(offset = 64) int u_numCells;
+	float u_thickness;
+	float u_scroll; // in [1, 2]
 };
 
 //----------------------------------------------------------------------------//
@@ -27,19 +27,19 @@ void main()
 {
 	const vec3 gridCol = vec3(0.5);
 
-	vec2 gridPos = mod(texPos - 0.5, 1.0 / numCells);
-	gridPos *= numCells;
+	vec2 gridPos = mod(a_texPos - 0.5, 1.0 / u_numCells);
+	gridPos *= u_numCells;
 
-	float halfThickness = thickness * 0.5;
-	vec2 halfGridPos = mod(texPos - 0.5, 1.0 / (numCells * 2));
-	halfGridPos *= (numCells * 2);
+	float halfThickness = u_thickness * 0.5;
+	vec2 halfGridPos = mod(a_texPos - 0.5, 1.0 / (u_numCells * 2));
+	halfGridPos *= (u_numCells * 2);
 
 	vec3 color = vec3(0.0);
 	if(on_grid(halfGridPos, halfThickness))
-		color += gridCol * (2.0 - 2.0 * scroll);
-	if(on_grid(gridPos, thickness))
-		color += gridCol * (2.0 * scroll - 1.0);
+		color += gridCol * (2.0 - 2.0 * u_scroll);
+	if(on_grid(gridPos, u_thickness))
+		color += gridCol * (2.0 * u_scroll - 1.0);
 
 	color = min(color, gridCol);
-	outColor = vec4(color, 1.0);
+	o_color = vec4(color, 1.0);
 }

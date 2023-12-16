@@ -35,18 +35,35 @@ struct DrawState
 	VkBuffer cameraStagingBuffer;
 	VkDeviceMemory cameraStagingBufferMemory;
 
+	//quad vertex buffers:
+	VkBuffer quadVertexBuffer;
+	VkDeviceMemory quadVertexBufferMemory;
+	VkBuffer quadIndexBuffer;
+	VkDeviceMemory quadIndexBufferMemory;
+
 	//grid pipeline objects:
 	VkDescriptorSetLayout gridPipelineDescriptorLayout;
 	VkPipelineLayout gridPipelineLayout;
 	VkPipeline gridPipeline;
 
-	VkBuffer gridVertexBuffer;
-	VkDeviceMemory gridVertexBufferMemory;
-	VkBuffer gridIndexBuffer;
-	VkDeviceMemory gridIndexBufferMemory;
-
 	VkDescriptorPool gridDescriptorPool;
 	VkDescriptorSet gridDescriptorSets[FRAMES_IN_FLIGHT];
+
+	//galaxy particle pipeline objects:
+	uint64 numGparticles;
+
+	VkDescriptorSetLayout gparticlePipelineDescriptorLayout;
+	VkPipelineLayout gparticlePipelineLayout;
+	VkPipeline gparticlePipeline;
+
+	VkDescriptorPool gparticleDescriptorPool;
+	VkDescriptorSet gparticleDescriptorSets[FRAMES_IN_FLIGHT];
+
+	VkDeviceSize gparticleBufferSize;
+	VkBuffer gparticleBuffers[FRAMES_IN_FLIGHT];
+	VkDeviceMemory gparticleBuffersMemory[FRAMES_IN_FLIGHT];
+	VkBuffer gparticleStagingBuffer;
+	VkDeviceMemory gparticleStagingBufferMemory;
 };
 
 //----------------------------------------------------------------------------//
@@ -57,10 +74,10 @@ struct Vertex
 	qm::vec2 texCoord;
 };
 
-struct Star
+struct GalaxyParticle
 {
-	qm::mat4 model;
-	qm::vec4 color;
+	qm::vec3 pos;
+	float scale;
 };
 
 //----------------------------------------------------------------------------//
@@ -83,11 +100,19 @@ struct Camera
 	float nearPlane;
 };
 
+struct DrawParams
+{
+	Camera* cam;
+
+	uint64 numParticles;
+	qm::mat4* particleTransforms;
+};
+
 //----------------------------------------------------------------------------//
 
 bool draw_init(DrawState** state);
 void draw_quit(DrawState* state);
 
-void draw_render(DrawState* state, Camera* cam);
+void draw_render(DrawState* state, DrawParams params);
 
 #endif

@@ -8,6 +8,8 @@
 // mirrors camera buffer on GPU
 struct CameraGPU
 {
+	qm::mat4 view;
+	qm::mat4 proj;
 	qm::mat4 viewProj;
 };
 
@@ -47,18 +49,36 @@ static void _draw_destroy_camera_buffer(DrawState *state);
 
 //----------------------------------------------------------------------------//
 
+static bool _draw_create_quad_vertex_buffer(DrawState *state);
+static void _draw_destroy_quad_vertex_buffer(DrawState *state);
+
+//----------------------------------------------------------------------------//
+
 static bool _draw_create_grid_pipeline(DrawState *state);
 static void _draw_destroy_grid_pipeline(DrawState *state);
-
-static bool _draw_create_grid_vertex_buffer(DrawState *state);
-static void _draw_destroy_grid_vertex_buffer(DrawState *state);
 
 static bool _draw_create_grid_descriptors(DrawState *state);
 static void _draw_destroy_grid_descriptors(DrawState *state);
 
 //----------------------------------------------------------------------------//
 
+static bool _draw_create_gparticle_pipeline(DrawState *state);
+static void _draw_destroy_gparticle_pipeline(DrawState *state);
+
+static bool _draw_create_gparticle_buffer(DrawState *state);
+static void _draw_destroy_gparticle_buffer(DrawState *state);
+
+static bool _draw_create_gparticle_descriptors(DrawState *state);
+static void _draw_destroy_gparticle_descriptors(DrawState *state);
+
+//----------------------------------------------------------------------------//
+
+static void _draw_start_command_buffer(DrawState *s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_end_command_buffer(VkCommandBuffer commandBuffer);
+
 static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+
+static void _draw_record_gparticle_command_buffer(DrawState *s, uint64 numParticles, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
 //----------------------------------------------------------------------------//
 
@@ -107,15 +127,28 @@ bool draw_init(DrawState **state)
 	if (!_draw_create_camera_buffer(s))
 		return false;
 
+	// initialize reusable vertex buffers:
+	//---------------
+	if (!_draw_create_quad_vertex_buffer(s))
+		return false;
+
 	// initialize grid drawing objects:
 	//---------------
 	if (!_draw_create_grid_pipeline(s))
 		return false;
 
-	if (!_draw_create_grid_vertex_buffer(s))
+	if (!_draw_create_grid_descriptors(s))
 		return false;
 
-	if (!_draw_create_grid_descriptors(s))
+	// initialize galaxy particle drawing objects:
+	//---------------
+	if (!_draw_create_gparticle_pipeline(s))
+		return false;
+
+	if(!_draw_create_gparticle_buffer(s))
+		return false;
+
+	if (!_draw_create_gparticle_descriptors(s))
 		return false;
 
 	return true;
@@ -125,9 +158,14 @@ void draw_quit(DrawState *s)
 {
 	vkDeviceWaitIdle(s->instance->device);
 
+	_draw_destroy_gparticle_descriptors(s);
+	_draw_destroy_gparticle_buffer(s);
+	_draw_destroy_gparticle_pipeline(s);
+
 	_draw_destroy_grid_descriptors(s);
-	_draw_destroy_grid_vertex_buffer(s);
 	_draw_destroy_grid_pipeline(s);
+
+	_draw_destroy_quad_vertex_buffer(s);
 
 	_draw_destroy_camera_buffer(s);
 	_draw_destroy_sync_objects(s);
@@ -143,17 +181,17 @@ void draw_quit(DrawState *s)
 
 //----------------------------------------------------------------------------//
 
-void draw_render(DrawState *s, Camera *cam)
+void draw_render(DrawState *s, DrawParams params)
 {
-	static uint32 frameIndex = 0;
+	static uint32 frameIdx = 0;
 
 	// WAIT FOR IN-FLIGHT FENCES AND GET NEXT SWAPCHAIN IMAGE (essentially just making sure last frame is done):
 	//---------------
-	vkWaitForFences(s->instance->device, 1, &s->inFlightFences[frameIndex], VK_TRUE, UINT64_MAX);
+	vkWaitForFences(s->instance->device, 1, &s->inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
 
 	uint32 imageIdx;
 	VkResult imageAquireResult = vkAcquireNextImageKHR(s->instance->device, s->instance->swapchain, UINT64_MAX,
-													   s->imageAvailableSemaphores[frameIndex], VK_NULL_HANDLE, &imageIdx);
+													   s->imageAvailableSemaphores[frameIdx], VK_NULL_HANDLE, &imageIdx);
 	if (imageAquireResult == VK_ERROR_OUT_OF_DATE_KHR || imageAquireResult == VK_SUBOPTIMAL_KHR)
 	{
 		_draw_window_resized(s);
@@ -165,7 +203,7 @@ void draw_render(DrawState *s, Camera *cam)
 		return;
 	}
 
-	vkResetFences(s->instance->device, 1, &s->inFlightFences[frameIndex]);
+	vkResetFences(s->instance->device, 1, &s->inFlightFences[frameIdx]);
 
 	// UPDATE CAMERA BUFFER:
 	//---------------
@@ -173,18 +211,26 @@ void draw_render(DrawState *s, Camera *cam)
 	glfwGetWindowSize(s->instance->window, &windowW, &windowH);
 
 	qm::mat4 view, projection;
-	view = qm::lookat(cam->pos, cam->center, cam->up);
-	projection = qm::perspective(cam->fov, (float)windowW / (float)windowH, cam->nearPlane, 2.0f * cam->dist);
+	view = qm::lookat(params.cam->pos, params.cam->center, params.cam->up);
+	projection = qm::perspective(params.cam->fov, (float)windowW / (float)windowH, params.cam->nearPlane, 2.0f * params.cam->dist);
 
 	CameraGPU camBuffer;
+	camBuffer.view = view;
+	camBuffer.proj = projection;
 	camBuffer.viewProj = projection * view;
 	render_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
-									  s->cameraBuffers[frameIndex], sizeof(CameraGPU), 0, &camBuffer);
+									  s->cameraBuffers[frameIdx], sizeof(CameraGPU), 0, &camBuffer);
 
-	// RECORD GRID COMMAND BUFFER:
+	// RECORD COMMAND BUFFER:
 	//---------------
-	vkResetCommandBuffer(s->commandBuffers[frameIndex], 0);
-	_draw_record_grid_command_buffer(s, cam, s->commandBuffers[frameIndex], frameIndex, imageIdx);
+	vkResetCommandBuffer(s->commandBuffers[frameIdx], 0);
+
+	_draw_start_command_buffer(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+
+	_draw_record_grid_command_buffer(s, params.cam, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_gparticle_command_buffer(s, params.numParticles, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+
+	_draw_end_command_buffer(s->commandBuffers[frameIdx]);
 
 	// SUBMIT COMMAND BUFFERS:
 	//---------------
@@ -193,21 +239,21 @@ void draw_render(DrawState *s, Camera *cam)
 
 	VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = &s->imageAvailableSemaphores[frameIndex];
+	submitInfo.pWaitSemaphores = &s->imageAvailableSemaphores[frameIdx];
 	submitInfo.pWaitDstStageMask = &waitStage;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &s->commandBuffers[frameIndex];
+	submitInfo.pCommandBuffers = &s->commandBuffers[frameIdx];
 	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = &s->renderFinishedSemaphores[frameIndex];
+	submitInfo.pSignalSemaphores = &s->renderFinishedSemaphores[frameIdx];
 
-	vkQueueSubmit(s->instance->graphicsQueue, 1, &submitInfo, s->inFlightFences[frameIndex]);
+	vkQueueSubmit(s->instance->graphicsQueue, 1, &submitInfo, s->inFlightFences[frameIdx]);
 
 	// PRESENT RESULT TO SCREEN:
 	//---------------
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &s->renderFinishedSemaphores[frameIndex];
+	presentInfo.pWaitSemaphores = &s->renderFinishedSemaphores[frameIdx];
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &s->instance->swapchain;
 	presentInfo.pImageIndices = &imageIdx;
@@ -219,7 +265,7 @@ void draw_render(DrawState *s, Camera *cam)
 	else if (presentResult != VK_SUCCESS)
 		ERROR_LOG("failed to present swapchain image");
 
-	frameIndex = (frameIndex + 1) % FRAMES_IN_FLIGHT;
+	frameIdx = (frameIdx + 1) % FRAMES_IN_FLIGHT;
 }
 
 //----------------------------------------------------------------------------//
@@ -451,7 +497,7 @@ static bool _draw_create_camera_buffer(DrawState *s)
 	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		s->cameraBuffers[i] = render_create_buffer(s->instance, bufferSize,
-												   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+												   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 												   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->cameraBuffersMemory[i]);
 	}
 
@@ -471,18 +517,44 @@ static void _draw_destroy_camera_buffer(DrawState *s)
 
 //----------------------------------------------------------------------------//
 
+static bool _draw_create_quad_vertex_buffer(DrawState *s)
+{
+	Vertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
+	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
+
+	s->quadVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
+												  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+												  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadVertexBufferMemory);
+	render_upload_with_staging_buffer(s->instance, s->quadVertexBuffer, sizeof(verts), 0, verts);
+
+	s->quadIndexBuffer = render_create_buffer(s->instance, sizeof(indices),
+												 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+												 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadIndexBufferMemory);
+	render_upload_with_staging_buffer(s->instance, s->quadIndexBuffer, sizeof(indices), 0, indices);
+
+	return true;
+}
+
+static void _draw_destroy_quad_vertex_buffer(DrawState *s)
+{
+	render_destroy_buffer(s->instance, s->quadVertexBuffer, s->quadVertexBufferMemory);
+	render_destroy_buffer(s->instance, s->quadIndexBuffer, s->quadIndexBufferMemory);
+}
+
+//----------------------------------------------------------------------------//
+
 static bool _draw_create_grid_pipeline(DrawState *s)
 {
 	// create descriptor set layout:
 	//---------------
 	VkDescriptorSetLayoutBinding storageLayoutBinding = {};
 	storageLayoutBinding.binding = 0;
-	storageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	storageLayoutBinding.descriptorCount = 1;
+	storageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	storageLayoutBinding.descriptorCount = 1; //camera
 	storageLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	storageLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBinding layouts[1] = {storageLayoutBinding};
+	VkDescriptorSetLayoutBinding layouts[1] = { storageLayoutBinding };
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -491,7 +563,7 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 
 	if (vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->gridPipelineDescriptorLayout) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to create descriptor set layout for terrain pipeline");
+		ERROR_LOG("failed to create descriptor set layout for grid pipeline");
 		return false;
 	}
 
@@ -662,7 +734,7 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 
 	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gridPipelineLayout) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to create pipeline layout");
+		ERROR_LOG("failed to create grid pipeline layout");
 		return false;
 	}
 
@@ -688,7 +760,7 @@ static bool _draw_create_grid_pipeline(DrawState *s)
 
 	if (vkCreateGraphicsPipelines(s->instance->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &s->gridPipeline) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to create terrain pipeline");
+		ERROR_LOG("failed to create grid pipeline");
 		return false;
 	}
 
@@ -707,34 +779,10 @@ static void _draw_destroy_grid_pipeline(DrawState *s)
 	vkDestroyDescriptorSetLayout(s->instance->device, s->gridPipelineDescriptorLayout, NULL);
 }
 
-static bool _draw_create_grid_vertex_buffer(DrawState *s)
-{
-	Vertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
-	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
-
-	s->gridVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
-												  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-												  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gridVertexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->gridVertexBuffer, sizeof(verts), 0, verts);
-
-	s->gridIndexBuffer = render_create_buffer(s->instance, sizeof(indices),
-												 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-												 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gridIndexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->gridIndexBuffer, sizeof(indices), 0, indices);
-
-	return true;
-}
-
-static void _draw_destroy_grid_vertex_buffer(DrawState *s)
-{
-	render_destroy_buffer(s->instance, s->gridVertexBuffer, s->gridVertexBufferMemory);
-	render_destroy_buffer(s->instance, s->gridIndexBuffer, s->gridIndexBufferMemory);
-}
-
 static bool _draw_create_grid_descriptors(DrawState *s)
 {
 	VkDescriptorPoolSize poolSizes[1] = {};
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[0].descriptorCount = FRAMES_IN_FLIGHT;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
@@ -745,7 +793,7 @@ static bool _draw_create_grid_descriptors(DrawState *s)
 
 	if (vkCreateDescriptorPool(s->instance->device, &poolInfo, nullptr, &s->gridDescriptorPool) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to create descriptor pool");
+		ERROR_LOG("failed to create grid descriptor pool");
 		return false;
 	}
 
@@ -761,7 +809,7 @@ static bool _draw_create_grid_descriptors(DrawState *s)
 
 	if (vkAllocateDescriptorSets(s->instance->device, &allocInfo, s->gridDescriptorSets) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to allocate descriptor sets");
+		ERROR_LOG("failed to allocate grid descriptor sets");
 		return false;
 	}
 
@@ -778,7 +826,7 @@ static bool _draw_create_grid_descriptors(DrawState *s)
 		descriptorWrites[0].dstSet = s->gridDescriptorSets[i];
 		descriptorWrites[0].dstBinding = 0;
 		descriptorWrites[0].dstArrayElement = 0;
-		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		descriptorWrites[0].descriptorCount = 1;
 		descriptorWrites[0].pBufferInfo = &bufferInfo;
 
@@ -795,7 +843,346 @@ static void _draw_destroy_grid_descriptors(DrawState *s)
 
 //----------------------------------------------------------------------------//
 
-static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static bool _draw_create_gparticle_pipeline(DrawState *s)
+{
+	// create descriptor set layout:
+	//---------------
+	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
+	cameraLayoutBinding.binding = 0;
+	cameraLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	cameraLayoutBinding.descriptorCount = 1;
+	cameraLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	cameraLayoutBinding.pImmutableSamplers = nullptr;
+
+	VkDescriptorSetLayoutBinding perInstanceLayoutBinding = {};
+	perInstanceLayoutBinding.binding = 1;
+	perInstanceLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	perInstanceLayoutBinding.descriptorCount = 1;
+	perInstanceLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	perInstanceLayoutBinding.pImmutableSamplers = nullptr;
+
+	VkDescriptorSetLayoutBinding layouts[2] = { cameraLayoutBinding, perInstanceLayoutBinding };
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 2;
+	layoutInfo.pBindings = layouts;
+
+	if (vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->gparticlePipelineDescriptorLayout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create descriptor set layout for galaxy particle pipeline");
+		return false;
+	}
+
+	// compile:
+	//---------------
+	uint64 vertexCodeSize, fragmentCodeSize;
+	uint32 *vertexCode = render_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertexCodeSize);
+	uint32 *fragmentCode = render_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragmentCodeSize);
+
+	// create shader modules:
+	//---------------
+	VkShaderModule vertexModule = render_create_shader_module(s->instance, vertexCodeSize, vertexCode);
+	VkShaderModule fragmentModule = render_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
+
+	render_free_spirv(vertexCode);
+	render_free_spirv(fragmentCode);
+
+	// create shader stages:
+	//---------------
+	VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo = {};
+	vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShaderStageCreateInfo.module = vertexModule;
+	vertShaderStageCreateInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo fragShaderStagCreateInfo = {};
+	fragShaderStagCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStagCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStagCreateInfo.module = fragmentModule;
+	fragShaderStagCreateInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageCreateInfo, fragShaderStagCreateInfo};
+
+	// create dynamic state:
+	//---------------
+	const uint32 dynamicStateCount = 2;
+	const VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
+	dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateCreateInfo.dynamicStateCount = dynamicStateCount;
+	dynamicStateCreateInfo.pDynamicStates = dynamicStates;
+
+	// create vertex input info:
+	//---------------
+	VkVertexInputBindingDescription vertexBindingDescription = {};
+	vertexBindingDescription.binding = 0;
+	vertexBindingDescription.stride = sizeof(Vertex);
+	vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	const uint32 vertexAttributeCount = 2;
+	VkVertexInputAttributeDescription vertexAttributeDescriptions[3] = {};
+
+	// pos:
+	vertexAttributeDescriptions[0].binding = 0;
+	vertexAttributeDescriptions[0].location = 0;
+	vertexAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+	vertexAttributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+	// tex coord:
+	vertexAttributeDescriptions[1].binding = 0;
+	vertexAttributeDescriptions[1].location = 1;
+	vertexAttributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+	vertexAttributeDescriptions[1].offset = offsetof(Vertex, texCoord);
+
+	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
+	vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+	vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertexBindingDescription;
+	vertexInputStateCreateInfo.vertexAttributeDescriptionCount = vertexAttributeCount;
+	vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions;
+
+	// create input assembly state:
+	//---------------
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
+	inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
+
+	// create viewport state (dynmaic so only need to specify counts):
+	//---------------
+	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
+	viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateCreateInfo.viewportCount = 1;
+	viewportStateCreateInfo.scissorCount = 1;
+
+	// create rasterization state:
+	//---------------
+	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = {};
+	rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
+	rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
+	rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizationStateCreateInfo.lineWidth = 1.0f;
+	rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE; // TODO: turn this back on
+	rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
+	rasterizationStateCreateInfo.depthBiasConstantFactor = 0.0f;
+	rasterizationStateCreateInfo.depthBiasClamp = 0.0f;
+	rasterizationStateCreateInfo.depthBiasSlopeFactor = 0.0f;
+
+	// create multisample state:
+	//---------------
+	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
+	multisampleStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampleStateCreateInfo.sampleShadingEnable = VK_FALSE;
+	multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampleStateCreateInfo.minSampleShading = 1.0f;
+	multisampleStateCreateInfo.pSampleMask = nullptr;
+	multisampleStateCreateInfo.alphaToCoverageEnable = VK_FALSE;
+	multisampleStateCreateInfo.alphaToOneEnable = VK_FALSE;
+
+	// create depth and stencil state:
+	//---------------
+	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = {};
+	depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencilCreateInfo.depthTestEnable = VK_TRUE;
+	depthStencilCreateInfo.depthWriteEnable = VK_TRUE;
+	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
+	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
+
+	// create color blend state:
+	//---------------
+	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};
+	colorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachmentState.blendEnable = VK_FALSE;
+	colorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {};
+	colorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
+	colorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;
+	colorBlendStateCreateInfo.attachmentCount = 1;
+	colorBlendStateCreateInfo.pAttachments = &colorBlendAttachmentState;
+	colorBlendStateCreateInfo.blendConstants[0] = 0.0f;
+	colorBlendStateCreateInfo.blendConstants[1] = 0.0f;
+	colorBlendStateCreateInfo.blendConstants[2] = 0.0f;
+	colorBlendStateCreateInfo.blendConstants[3] = 0.0f;
+
+	// create pipeline layout:
+	//---------------
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutCreateInfo.setLayoutCount = 1;
+	pipelineLayoutCreateInfo.pSetLayouts = &s->gparticlePipelineDescriptorLayout;
+	pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+	pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+
+	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gparticlePipelineLayout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create galaxy particle pipeline layout");
+		return false;
+	}
+
+	// create pipeline:
+	//---------------
+	VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
+	pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineCreateInfo.stageCount = 2;
+	pipelineCreateInfo.pStages = shaderStages;
+	pipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
+	pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
+	pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
+	pipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
+	pipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
+	pipelineCreateInfo.pDepthStencilState = &depthStencilCreateInfo;
+	pipelineCreateInfo.pColorBlendState = &colorBlendStateCreateInfo;
+	pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
+	pipelineCreateInfo.layout = s->gparticlePipelineLayout;
+	pipelineCreateInfo.renderPass = s->finalRenderPass;
+	pipelineCreateInfo.subpass = 0;
+	pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineCreateInfo.basePipelineIndex = -1;
+
+	if (vkCreateGraphicsPipelines(s->instance->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &s->gparticlePipeline) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create galaxy particle pipeline");
+		return false;
+	}
+
+	// free shader modules:
+	//---------------
+	render_destroy_shader_module(s->instance, vertexModule);
+	render_destroy_shader_module(s->instance, fragmentModule);
+
+	return true;
+}
+
+static void _draw_destroy_gparticle_pipeline(DrawState *s)
+{
+	vkDestroyPipeline(s->instance->device, s->gparticlePipeline, NULL);
+	vkDestroyPipelineLayout(s->instance->device, s->gparticlePipelineLayout, NULL);
+	vkDestroyDescriptorSetLayout(s->instance->device, s->gparticlePipelineDescriptorLayout, NULL);
+}
+
+static bool _draw_create_gparticle_buffer(DrawState *s)
+{
+	s->numGparticles = 0;
+	s->gparticleBufferSize = 1024 * sizeof(GalaxyParticle); //default allocate 1024 elements, will resize if necessary
+
+	s->gparticleStagingBuffer = render_create_buffer(s->instance, s->gparticleBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+														VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+														&s->gparticleStagingBufferMemory);
+
+	GalaxyParticle testParticle = {qm::vec3(0.0f, 0.0f, 1000.0f), 4000.0f};
+
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	{
+		s->gparticleBuffers[i] = render_create_buffer(s->instance, s->gparticleBufferSize,
+														VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+														VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gparticleBuffersMemory[i]);
+	
+		render_upload_with_staging_buffer(s->instance, s->gparticleStagingBuffer, s->gparticleStagingBufferMemory, s->gparticleBuffers[i], sizeof(qm::mat4), 0, &testParticle);
+	}
+
+	return true;
+}
+
+static void _draw_destroy_gparticle_buffer(DrawState *s)
+{
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+		render_destroy_buffer(s->instance, s->gparticleBuffers[i], s->gparticleBuffersMemory[i]);
+
+	render_destroy_buffer(s->instance, s->gparticleStagingBuffer, s->gparticleStagingBufferMemory);
+}
+
+static bool _draw_create_gparticle_descriptors(DrawState *s)
+{
+	VkDescriptorPoolSize poolSizes[2] = {};
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //camera
+	poolSizes[0].descriptorCount = FRAMES_IN_FLIGHT;
+	poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC; //positions
+	poolSizes[1].descriptorCount = FRAMES_IN_FLIGHT;
+
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 2;
+	poolInfo.pPoolSizes = poolSizes;
+	poolInfo.maxSets = FRAMES_IN_FLIGHT;
+
+	if (vkCreateDescriptorPool(s->instance->device, &poolInfo, nullptr, &s->gparticleDescriptorPool) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create galaxy particle descriptor pool");
+		return false;
+	}
+
+	VkDescriptorSetLayout layouts[FRAMES_IN_FLIGHT];
+	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+		layouts[i] = s->gparticlePipelineDescriptorLayout;
+
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = s->gparticleDescriptorPool;
+	allocInfo.descriptorSetCount = FRAMES_IN_FLIGHT;
+	allocInfo.pSetLayouts = layouts;
+
+	if (vkAllocateDescriptorSets(s->instance->device, &allocInfo, s->gparticleDescriptorSets) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to allocate galaxy particle descriptor sets");
+		return false;
+	}
+
+	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
+	{
+		VkDescriptorBufferInfo cameraBufferInfo = {};
+		cameraBufferInfo.buffer = s->cameraBuffers[i];
+		cameraBufferInfo.offset = 0;
+		cameraBufferInfo.range = sizeof(CameraGPU);
+
+		VkDescriptorBufferInfo perInstanceBufferInfo = {};
+		perInstanceBufferInfo.buffer = s->gparticleBuffers[i];
+		perInstanceBufferInfo.offset = 0;
+		perInstanceBufferInfo.range = VK_WHOLE_SIZE;
+
+		VkWriteDescriptorSet descriptorWrites[2] = {};
+
+		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[0].dstSet = s->gparticleDescriptorSets[i];
+		descriptorWrites[0].dstBinding = 0;
+		descriptorWrites[0].dstArrayElement = 0;
+		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[0].descriptorCount = 1;
+		descriptorWrites[0].pBufferInfo = &cameraBufferInfo;
+
+		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[1].dstSet = s->gparticleDescriptorSets[i];
+		descriptorWrites[1].dstBinding = 1;
+		descriptorWrites[1].dstArrayElement = 0;
+		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+		descriptorWrites[1].descriptorCount = 1;
+		descriptorWrites[1].pBufferInfo = &perInstanceBufferInfo;
+
+		vkUpdateDescriptorSets(s->instance->device, 2, descriptorWrites, 0, nullptr);
+	}
+
+	return true;
+}
+
+static void _draw_destroy_gparticle_descriptors(DrawState *s)
+{
+	vkDestroyDescriptorPool(s->instance->device, s->gparticleDescriptorPool, NULL);
+}
+
+//----------------------------------------------------------------------------//
+
+static void _draw_start_command_buffer(DrawState *s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	VkCommandBufferBeginInfo beginInfo = {};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -820,13 +1207,12 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	renderBeginInfo.pClearValues = clearValues;
 
 	vkCmdBeginRenderPass(commandBuffer, &renderBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline);
 
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
-	viewport.y = 0.0f;
+	viewport.y = (float)s->instance->swapchainExtent.height;
 	viewport.width = (float)s->instance->swapchainExtent.width;
-	viewport.height = (float)s->instance->swapchainExtent.height;
+	viewport.height = -(float)s->instance->swapchainExtent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -835,13 +1221,26 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	scissor.offset = {0, 0};
 	scissor.extent = s->instance->swapchainExtent;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+}
+
+static void _draw_end_command_buffer(VkCommandBuffer commandBuffer)
+{
+	vkCmdEndRenderPass(commandBuffer);
+
+	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+		ERROR_LOG("failed to end command buffer");
+}
+
+static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+{
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline);
 
 	//bind buffers:
 	//---------------
-	VkBuffer vertexBuffers[] = {s->gridVertexBuffer};
+	VkBuffer vertexBuffers[] = {s->quadVertexBuffer};
 	VkDeviceSize offsets[] = {0};
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-	vkCmdBindIndexBuffer(commandBuffer, s->gridIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(commandBuffer, s->quadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipelineLayout, 0, 1, &s->gridDescriptorSets[frameIndex], 0, nullptr);
 
@@ -876,10 +1275,25 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	//draw:
 	//---------------
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
-	vkCmdEndRenderPass(commandBuffer);
+}
 
-	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-		ERROR_LOG("failed to end command buffer");
+static void _draw_record_gparticle_command_buffer(DrawState *s, uint64 numParticles, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+{
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gparticlePipeline);
+
+	//bind buffers:
+	//---------------
+	VkBuffer vertexBuffers[] = {s->quadVertexBuffer};
+	VkDeviceSize offsets[] = {0};
+	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+	vkCmdBindIndexBuffer(commandBuffer, s->quadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+	uint32 dynamicOffset = 0;
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gparticlePipelineLayout, 0, 1, &s->gparticleDescriptorSets[frameIndex], 1, &dynamicOffset);
+
+	//draw:
+	//---------------
+	vkCmdDrawIndexed(commandBuffer, 6, numParticles, 0, 0, 0);
 }
 
 //----------------------------------------------------------------------------//
@@ -888,7 +1302,7 @@ static void _draw_window_resized(DrawState *s)
 {
 	int32 w, h;
 	glfwGetFramebufferSize(s->instance->window, &w, &h);
-	if (w == 0 || h == 0) // TODO: TEST
+	if (w == 0 || h == 0)
 		return;
 
 	render_resize_swapchain(s->instance, w, h);
