@@ -93,6 +93,10 @@ struct Camera
 	float targetDist;
 	float maxDist;
 
+	float minTilt, maxTilt;
+	float targetTilt;
+	float tilt;
+
 	float angle;
 	float targetAngle;
 

@@ -37,7 +37,7 @@ void main()
 	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
 
 	Particle particle = u_particles[gl_InstanceIndex];
-	vec3 worldspacePos = particle.pos + ((camRight * a_pos.x) + (camUp * a_pos.y)) * particle.scale;
+	vec3 worldspacePos = particle.pos + ((camRight * a_pos.x) + (camUp * a_pos.z)) * particle.scale;
 
 	o_texPos = a_texPos;
 	gl_Position = u_viewProj * vec4(worldspacePos, 1.0);

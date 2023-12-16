@@ -53,8 +53,8 @@ static void _render_error_log(const char* message, const char* file, int32 line)
 	const char* REQUIRED_LAYERS[REQUIRED_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-#define REQUIRED_DEVICE_EXTENSION_COUNT 1
-const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#define REQUIRED_DEVICE_EXTENSION_COUNT 2
+const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
 
 //----------------------------------------------------------------------------//
 
@@ -328,8 +328,12 @@ void render_transition_image_layout(RenderInstance* inst, VkImage image, VkForma
 
 uint32* render_load_spirv(const char* path, uint64* size)
 {
+#if _MSC_VER
 	FILE* fptr;
 	fopen_s(&fptr, path, "rb");
+#else
+	FILE* fptr = fopen(path, "rb");
+#endif
 	if(!fptr)
 	{
 		ERROR_LOG("failed to open spirv file");

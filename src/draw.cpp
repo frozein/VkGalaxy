@@ -520,7 +520,7 @@ static void _draw_destroy_camera_buffer(DrawState *s)
 
 static bool _draw_create_quad_vertex_buffer(DrawState *s)
 {
-	Vertex verts[4] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}}, {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}}};
+	Vertex verts[4] = {{{-0.5f, 0.0f, -0.5f}, {0.0f, 0.0f}}, {{0.5f, 0.0f, -0.5f}, {1.0f, 0.0f}}, {{-0.5f, 0.0f, 0.5f}, {0.0f, 1.0f}}, {{0.5f, 0.0f, 0.5f}, {1.0f, 1.0f}}};
 	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
 
 	s->quadVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
@@ -1082,7 +1082,7 @@ static bool _draw_create_gparticle_buffer(DrawState *s)
 														VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
 														&s->gparticleStagingBufferMemory);
 
-	GalaxyParticle testParticle = {qm::vec3(0.0f, 0.0f, 1000.0f), 4000.0f};
+	GalaxyParticle testParticle = {qm::vec3(0.0f, 1000.0f, 0.0f), 2000.0f};
 
 	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
@@ -1271,7 +1271,7 @@ static void _draw_record_grid_command_buffer(DrawState *s, Camera* cam, VkComman
 	float thickness = 0.0125f;
 	float scroll = (cam->dist - powf(2.0f, roundf(log2f(cam->dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(cam->dist) - 1.5f))) + 0.5f;
 	qm::vec3 offset3 = (cam->center - pos) / size;
-	qm::vec2 offset = qm::vec2(offset3.x, offset3.y);
+	qm::vec2 offset = qm::vec2(offset3.x, offset3.z);
 
 	GridParamsFragGPU fragParams = {offset, numCells, thickness, scroll};
 	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);

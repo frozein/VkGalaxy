@@ -14,5 +14,5 @@ void main()
 	if(dot(centeredPos, centeredPos) > 1.0)
 		discard;
 		
-	o_color = vec4(a_texPos, 0.0, 1.0);
+	o_color = vec4(1.0);
 }

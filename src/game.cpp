@@ -104,11 +104,15 @@ bool _game_camera_init(Camera** camera)
 		return false;
 	}
 
-	cam->up = {0.0f, 0.0f, 1.0f};
+	cam->up = {0.0f, 1.0f, 0.0f};
 	cam->center = cam->targetCenter = {0.0f, 0.0f, 0.0f};
 
 	cam->dist = cam->targetDist = cam->maxDist = 16000.0f;
 	cam->angle = cam->targetAngle = 45.0f;
+
+	cam->minTilt = 15.0f;
+	cam->maxTilt = 89.0f;
+	cam->tilt = cam->targetTilt = 45.0f;
 
 	cam->fov = 45.0f;
 	cam->nearPlane = 0.1f;
@@ -125,9 +129,10 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 {
 	float camSpeed = 1.0f * dt * cam->dist;
 	float angleSpeed = 45.0f * dt;
+	float tiltSpeed = 30.0f * dt;
 
-	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
+	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	qm::vec3 forward = qm::vec3(forward4.x, forward4.y, forward4.z);
 	qm::vec3 side = qm::vec3(side4.x, side4.y, side4.z);
@@ -138,22 +143,28 @@ void _game_camera_update(Camera* cam, float dt, GLFWwindow* window)
 	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 		camVel = camVel + forward;
 	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		camVel = camVel - side;
-	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		camVel = camVel + side;
+	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		camVel = camVel - side;
 
 	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 		cam->targetAngle -= angleSpeed;
 	if(glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
 		cam->targetAngle += angleSpeed;
 
+	if(glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+		cam->targetTilt = fminf(cam->targetTilt + tiltSpeed, cam->maxTilt);
+	if(glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
+		cam->targetTilt = fmaxf(cam->targetTilt - tiltSpeed, cam->minTilt);
+
 	cam->targetCenter = cam->targetCenter + camSpeed * qm::normalize(camVel);
 
 	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
 	cam->dist += (cam->targetDist - cam->dist) * _game_exp_scale_factor(0.99f, dt);
 	cam->angle += (cam->targetAngle - cam->angle) * _game_exp_scale_factor(0.99f, dt);
+	cam->tilt += (cam->targetTilt - cam->tilt) * _game_exp_scale_factor(0.99f, dt);
 
-	qm::vec4 toPos = qm::rotate(side, -45.0f) * qm::vec4(forward, 1.0f);
+	qm::vec4 toPos = qm::rotate(side, cam->tilt) * qm::vec4(forward, 1.0f);
 	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
