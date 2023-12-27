@@ -22,7 +22,8 @@ void _game_scroll_callback(GLFWwindow* window, double x, double y);
 
 //----------------------------------------------------------------------------//
 
-float _game_exp_scale_factor(float speed, float dt);
+template<typename T>
+void _game_decay_to(T& value, T target, float rate, float dt);
 
 //----------------------------------------------------------------------------//
 
@@ -134,12 +135,12 @@ void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window)
 
 	qm::vec3 camVel(0.0f, 0.0f, 0.0f);
 	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		camVel = camVel - forward;
-	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 		camVel = camVel + forward;
-	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		camVel = camVel + side;
+	if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		camVel = camVel - forward;
 	if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		camVel = camVel + side;
+	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
 		camVel = camVel - side;
 
 	if(glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
@@ -154,13 +155,13 @@ void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window)
 
 	cam->targetCenter = cam->targetCenter + camSpeed * qm::normalize(camVel);
 
-	cam->center = cam->center + (cam->targetCenter - cam->center) * _game_exp_scale_factor(0.985f, dt);
-	cam->dist += (cam->targetDist - cam->dist) * _game_exp_scale_factor(0.99f, dt);
-	cam->angle += (cam->targetAngle - cam->angle) * _game_exp_scale_factor(0.99f, dt);
-	cam->tilt += (cam->targetTilt - cam->tilt) * _game_exp_scale_factor(0.99f, dt);
+	_game_decay_to(cam->center, cam->targetCenter, 0.985f, dt);
+	_game_decay_to(cam->dist  , cam->targetDist  , 0.99f , dt);
+	_game_decay_to(cam->angle , cam->targetAngle , 0.99f , dt);
+	_game_decay_to(cam->tilt  , cam->targetTilt  , 0.99f , dt);
 
-	qm::vec4 toPos = qm::rotate(side, cam->tilt) * qm::vec4(forward, 1.0f);
-	cam->pos = cam->center + cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
+	qm::vec4 toPos = qm::rotate(side, -cam->tilt) * qm::vec4(forward, 1.0f);
+	cam->pos = cam->center - cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
 void _game_camera_cursor_moved(GameCamera* cam, float x, float y)
@@ -205,9 +206,10 @@ void _game_scroll_callback(GLFWwindow* window, double x, double y)
 
 //----------------------------------------------------------------------------//
 
-float _game_exp_scale_factor(float speed, float dt)
+template<typename T>
+void _game_decay_to(T& value, T target, float rate, float dt)
 {
-	return 1.0f - powf(speed, 1000.0f * dt);
+	value = value + (target - value) * (1.0f - powf(rate, 1000.0f * dt));
 }
 
 //----------------------------------------------------------------------------//

@@ -624,7 +624,7 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 
 		//check if required queue families are supported:
 		//---------------
-		int32 graphicsFamilyIdx = -1;
+		int32 graphicsComputeFamilyIdx = -1;
 		int32 presentFamilyIdx = -1;
 
 		uint32 queueFamilyCount;
@@ -634,21 +634,22 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 
 		for(uint32 j = 0; j < queueFamilyCount; j++)
 		{
-			if(queueFamilies[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) //TODO: see if there is a way to determine most optimal queue families
-				graphicsFamilyIdx = j;
+			if((queueFamilies[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+               (queueFamilies[j].queueFlags & VK_QUEUE_COMPUTE_BIT)) //TODO: see if there is a way to determine most optimal queue families
+				graphicsComputeFamilyIdx = j;
 			
 			VkBool32 presentSupport;
 			vkGetPhysicalDeviceSurfaceSupportKHR(devices[i], j, inst->surface, &presentSupport);
 			if(presentSupport)
 				presentFamilyIdx = j;
 
-			if(graphicsFamilyIdx > 0 && presentFamilyIdx > 0)
+			if(graphicsComputeFamilyIdx > 0 && presentFamilyIdx > 0)
 				break;
 		}
 
 		free(queueFamilies);
 
-		if(graphicsFamilyIdx < 0 || presentFamilyIdx < 0)
+		if(graphicsComputeFamilyIdx < 0 || presentFamilyIdx < 0)
 			continue;
 
 		//check if required extensions are supported:
@@ -706,7 +707,7 @@ static bool _render_pick_physical_device(RenderInstance* inst)
 		if(score > maxScore)
 		{
 			inst->physicalDevice = devices[i];
-			inst->graphicsFamilyIdx = graphicsFamilyIdx;
+			inst->graphicsComputeFamilyIdx = graphicsComputeFamilyIdx;
 			inst->presentFamilyIdx = presentFamilyIdx;
 
 			maxScore = score;
@@ -735,15 +736,15 @@ static bool _render_create_device(RenderInstance* inst)
 	//TODO: allow user to define which queues they would like, instead of just getting graphics and present
 	uint32 queueCount = 0;
 	uint32 queueIndices[2];
-	if(inst->graphicsFamilyIdx == inst->presentFamilyIdx)
+	if(inst->graphicsComputeFamilyIdx == inst->presentFamilyIdx)
 	{
 		queueCount = 1;
-		queueIndices[0] = inst->graphicsFamilyIdx;
+		queueIndices[0] = inst->graphicsComputeFamilyIdx;
 	}
 	else
 	{
 		queueCount = 2;
-		queueIndices[0] = inst->graphicsFamilyIdx;
+		queueIndices[0] = inst->graphicsComputeFamilyIdx;
 		queueIndices[1] = inst->presentFamilyIdx;
 	}
 
@@ -787,7 +788,8 @@ static bool _render_create_device(RenderInstance* inst)
 		return false;
 	}
 
-	vkGetDeviceQueue(inst->device, inst->graphicsFamilyIdx, 0, &inst->graphicsQueue);
+	vkGetDeviceQueue(inst->device, inst->graphicsComputeFamilyIdx, 0, &inst->graphicsQueue);
+	vkGetDeviceQueue(inst->device, inst->graphicsComputeFamilyIdx, 0, &inst->computeQueue);
 	vkGetDeviceQueue(inst->device, inst->presentFamilyIdx, 0, &inst->presentQueue);
 
 	return true;
@@ -879,9 +881,9 @@ static bool _render_create_swapchain(RenderInstance* inst, uint32 w, uint32 h)
 	swapchainInfo.clipped = VK_TRUE;
 	swapchainInfo.oldSwapchain = VK_NULL_HANDLE;
 
-	uint32 indices[] = {inst->graphicsFamilyIdx, inst->presentFamilyIdx};
+	uint32 indices[] = {inst->graphicsComputeFamilyIdx, inst->presentFamilyIdx};
 
-	if(inst->graphicsFamilyIdx != inst->presentFamilyIdx)
+	if(inst->graphicsComputeFamilyIdx != inst->presentFamilyIdx)
 	{	
 		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapchainInfo.queueFamilyIndexCount = 2;
@@ -930,7 +932,7 @@ static bool _render_create_command_pool(RenderInstance* inst)
 	VkCommandPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	poolInfo.queueFamilyIndex = inst->graphicsFamilyIdx;
+	poolInfo.queueFamilyIndex = inst->graphicsComputeFamilyIdx;
 
 	if(vkCreateCommandPool(inst->device, &poolInfo, nullptr, &inst->commandPool) != VK_SUCCESS)
 	{

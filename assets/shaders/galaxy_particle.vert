@@ -26,7 +26,7 @@ layout(binding = 0) uniform Camera
 
 layout(binding = 1) buffer PerInstance
 {
-	Particle u_particles[];
+	Particle b_particles[];
 };
 
 //----------------------------------------------------------------------------//
@@ -36,7 +36,7 @@ void main()
 	vec3 camRight = vec3(u_view[0][0], u_view[1][0], u_view[2][0]);
 	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
 
-	Particle particle = u_particles[gl_InstanceIndex];
+	Particle particle = b_particles[gl_InstanceIndex];
 	vec3 worldspacePos = particle.pos + ((camRight * a_pos.x) + (camUp * a_pos.z)) * particle.scale;
 
 	o_texPos = a_texPos;

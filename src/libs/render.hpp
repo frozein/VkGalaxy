@@ -19,9 +19,10 @@ struct RenderInstance
 	VkSurfaceKHR surface;
 	VkPhysicalDevice physicalDevice;
 
-	uint32 graphicsFamilyIdx;
+	uint32 graphicsComputeFamilyIdx;
 	uint32 presentFamilyIdx;
 	VkQueue graphicsQueue;
+	VkQueue computeQueue;
 	VkQueue presentQueue;
 
 	VkSwapchainKHR swapchain;

@@ -1,0 +1,31 @@
+#version 430
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+//----------------------------------------------------------------------------//
+
+struct Particle
+{
+	vec3 pos;
+	float scale;
+};
+
+//----------------------------------------------------------------------------//
+
+layout(std140, binding = 0) buffer Particles
+{
+	Particle b_particles[];
+};
+
+layout(push_constant) uniform Params
+{
+    float u_time;
+};
+
+//----------------------------------------------------------------------------//
+
+void main()
+{
+    b_particles[gl_GlobalInvocationID.x].pos = vec3(0.0, 1500.0 + 500.0 * sin(u_time * 5.0), 0.0);
+    b_particles[gl_GlobalInvocationID.x].scale = 2000.0;
+}

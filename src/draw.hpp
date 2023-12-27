@@ -52,18 +52,21 @@ struct DrawState
 	//galaxy particle pipeline objects:
 	uint64 numGparticles;
 
-	VkDescriptorSetLayout gparticlePipelineDescriptorLayout;
-	VkPipelineLayout gparticlePipelineLayout;
-	VkPipeline gparticlePipeline;
+	VkDescriptorSetLayout gparticleRenderPipelineDescriptorLayout;
+	VkPipelineLayout gparticleRenderPipelineLayout;
+	VkPipeline gparticleRenderPipeline;
+	VkDescriptorPool gparticleRenderDescriptorPool;
+	VkDescriptorSet gparticleRenderDescriptorSets[FRAMES_IN_FLIGHT];
 
-	VkDescriptorPool gparticleDescriptorPool;
-	VkDescriptorSet gparticleDescriptorSets[FRAMES_IN_FLIGHT];
+	VkDescriptorSetLayout gparticleComputePipelineDescriptorLayout;
+	VkPipelineLayout gparticleComputePipelineLayout;
+	VkPipeline gparticleComputePipeline;
+	VkDescriptorPool gparticleComputeDescriptorPool;
+	VkDescriptorSet gparticleComputeDescriptorSet;
 
 	VkDeviceSize gparticleBufferSize;
-	VkBuffer gparticleBuffers[FRAMES_IN_FLIGHT];
-	VkDeviceMemory gparticleBuffersMemory[FRAMES_IN_FLIGHT];
-	VkBuffer gparticleStagingBuffer;
-	VkDeviceMemory gparticleStagingBufferMemory;
+	VkBuffer gparticleBuffer;
+	VkDeviceMemory gparticleBufferMemory;
 };
 
 //----------------------------------------------------------------------------//
