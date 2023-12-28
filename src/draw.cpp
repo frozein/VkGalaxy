@@ -24,14 +24,14 @@ struct GridParamsFragGPU
 {
 	qm::vec2 offset;
 	int32 numCells;
-	float thickness;
-	float scroll;
+	f32 thickness;
+	f32 scroll;
 };
 
 //parameters for particle compute shader
 struct ParticleComputeParamsGPU
 {
-	float time;
+	f32 time;
 };
 
 //----------------------------------------------------------------------------//
@@ -116,7 +116,7 @@ bool draw_init(DrawState** state)
 
 	// create render state:
 	//---------------
-	if (!render_init(&s->instance, 1920, 1080, "VulkanCraft"))
+	if (!vkh_init(&s->instance, 1920, 1080, "VulkanCraft"))
 	{
 		ERROR_LOG("failed to initialize render instance");
 		return false;
@@ -197,7 +197,7 @@ void draw_quit(DrawState* s)
 	_draw_destroy_final_render_pass(s);
 	_draw_destroy_depth_buffer(s);
 
-	render_quit(s->instance);
+	vkh_quit(s->instance);
 
 	free(s);
 }
@@ -235,13 +235,13 @@ void draw_render(DrawState* s, DrawParams* params)
 
 	qm::mat4 view, projection;
 	view = qm::lookat(params->cam.pos, params->cam.target, params->cam.up);
-	projection = qm::perspective(params->cam.fov, (float)windowW / (float)windowH, 0.1f, INFINITY);
+	projection = qm::perspective(params->cam.fov, (f32)windowW / (f32)windowH, 0.1f, INFINITY);
 
 	CameraGPU camBuffer;
 	camBuffer.view = view;
 	camBuffer.proj = projection;
 	camBuffer.viewProj = projection * view;
-	render_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
+	vkh_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
 									  s->cameraBuffers[frameIdx], sizeof(CameraGPU), 0, &camBuffer);
 
 	// RECORD COMMAND BUFFER:
@@ -321,18 +321,18 @@ static bool _draw_create_depth_buffer(DrawState* s)
 		return false;
 	}
 
-	s->finalDepthImage = render_create_image(s->instance, s->instance->swapchainExtent.width, s->instance->swapchainExtent.height, 1,
+	s->finalDepthImage = vkh_create_image(s->instance, s->instance->swapchainExtent.width, s->instance->swapchainExtent.height, 1,
 											 VK_SAMPLE_COUNT_1_BIT, s->depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 											 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->finalDepthMemory);
-	s->finalDepthView = render_create_image_view(s->instance, s->finalDepthImage, s->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+	s->finalDepthView = vkh_create_image_view(s->instance, s->finalDepthImage, s->depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
 	return true;
 }
 
 static void _draw_destroy_depth_buffer(DrawState* s)
 {
-	render_destroy_image_view(s->instance, s->finalDepthView);
-	render_destroy_image(s->instance, s->finalDepthImage, s->finalDepthMemory);
+	vkh_destroy_image_view(s->instance, s->finalDepthView);
+	vkh_destroy_image(s->instance, s->finalDepthImage, s->finalDepthMemory);
 }
 
 static bool _draw_create_final_render_pass(DrawState* s)
@@ -532,12 +532,12 @@ static bool _draw_create_camera_buffer(DrawState* s)
 
 	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
-		s->cameraBuffers[i] = render_create_buffer(s->instance, bufferSize,
+		s->cameraBuffers[i] = vkh_create_buffer(s->instance, bufferSize,
 												   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 												   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->cameraBuffersMemory[i]);
 	}
 
-	s->cameraStagingBuffer = render_create_buffer(s->instance, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	s->cameraStagingBuffer = vkh_create_buffer(s->instance, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 												  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &s->cameraStagingBufferMemory);
 
 	return true;
@@ -545,10 +545,10 @@ static bool _draw_create_camera_buffer(DrawState* s)
 
 static void _draw_destroy_camera_buffer(DrawState* s)
 {
-	render_destroy_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory);
+	vkh_destroy_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory);
 
 	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
-		render_destroy_buffer(s->instance, s->cameraBuffers[i], s->cameraBuffersMemory[i]);
+		vkh_destroy_buffer(s->instance, s->cameraBuffers[i], s->cameraBuffersMemory[i]);
 }
 
 //----------------------------------------------------------------------------//
@@ -558,23 +558,23 @@ static bool _draw_create_quad_vertex_buffer(DrawState* s)
 	Vertex verts[4] = {{{-0.5f, 0.0f, -0.5f}, {0.0f, 0.0f}}, {{0.5f, 0.0f, -0.5f}, {1.0f, 0.0f}}, {{-0.5f, 0.0f, 0.5f}, {0.0f, 1.0f}}, {{0.5f, 0.0f, 0.5f}, {1.0f, 1.0f}}};
 	uint32 indices[6] = {0, 1, 2, 1, 2, 3};
 
-	s->quadVertexBuffer = render_create_buffer(s->instance, sizeof(verts),
+	s->quadVertexBuffer = vkh_create_buffer(s->instance, sizeof(verts),
 												  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 												  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadVertexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->quadVertexBuffer, sizeof(verts), 0, verts);
+	vkh_upload_with_staging_buffer_implicit(s->instance, s->quadVertexBuffer, sizeof(verts), 0, verts);
 
-	s->quadIndexBuffer = render_create_buffer(s->instance, sizeof(indices),
+	s->quadIndexBuffer = vkh_create_buffer(s->instance, sizeof(indices),
 												 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 												 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadIndexBufferMemory);
-	render_upload_with_staging_buffer(s->instance, s->quadIndexBuffer, sizeof(indices), 0, indices);
+	vkh_upload_with_staging_buffer_implicit(s->instance, s->quadIndexBuffer, sizeof(indices), 0, indices);
 
 	return true;
 }
 
 static void _draw_destroy_quad_vertex_buffer(DrawState* s)
 {
-	render_destroy_buffer(s->instance, s->quadVertexBuffer, s->quadVertexBufferMemory);
-	render_destroy_buffer(s->instance, s->quadIndexBuffer, s->quadIndexBufferMemory);
+	vkh_destroy_buffer(s->instance, s->quadVertexBuffer, s->quadVertexBufferMemory);
+	vkh_destroy_buffer(s->instance, s->quadIndexBuffer, s->quadIndexBufferMemory);
 }
 
 //----------------------------------------------------------------------------//
@@ -606,16 +606,16 @@ static bool _draw_create_grid_pipeline(DrawState* s)
 	// compile:
 	//---------------
 	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32 *vertexCode = render_load_spirv("assets/spirv/grid.vert.spv", &vertexCodeSize);
-	uint32 *fragmentCode = render_load_spirv("assets/spirv/grid.frag.spv", &fragmentCodeSize);
+	uint32 *vertexCode = vkh_load_spirv("assets/spirv/grid.vert.spv", &vertexCodeSize);
+	uint32 *fragmentCode = vkh_load_spirv("assets/spirv/grid.frag.spv", &fragmentCodeSize);
 
 	// create shader modules:
 	//---------------
-	VkShaderModule vertexModule = render_create_shader_module(s->instance, vertexCodeSize, vertexCode);
-	VkShaderModule fragmentModule = render_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
+	VkShaderModule vertexModule = vkh_create_shader_module(s->instance, vertexCodeSize, vertexCode);
+	VkShaderModule fragmentModule = vkh_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
 
-	render_free_spirv(vertexCode);
-	render_free_spirv(fragmentCode);
+	vkh_free_spirv(vertexCode);
+	vkh_free_spirv(fragmentCode);
 
 	// create shader stages:
 	//---------------
@@ -802,8 +802,8 @@ static bool _draw_create_grid_pipeline(DrawState* s)
 
 	// free shader modules:
 	//---------------
-	render_destroy_shader_module(s->instance, vertexModule);
-	render_destroy_shader_module(s->instance, fragmentModule);
+	vkh_destroy_shader_module(s->instance, vertexModule);
+	vkh_destroy_shader_module(s->instance, fragmentModule);
 
 	return true;
 }
@@ -913,16 +913,16 @@ static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 	// compile:
 	//---------------
 	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32 *vertexCode = render_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertexCodeSize);
-	uint32 *fragmentCode = render_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragmentCodeSize);
+	uint32 *vertexCode = vkh_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertexCodeSize);
+	uint32 *fragmentCode = vkh_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragmentCodeSize);
 
 	// create shader modules:
 	//---------------
-	VkShaderModule vertexModule = render_create_shader_module(s->instance, vertexCodeSize, vertexCode);
-	VkShaderModule fragmentModule = render_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
+	VkShaderModule vertexModule = vkh_create_shader_module(s->instance, vertexCodeSize, vertexCode);
+	VkShaderModule fragmentModule = vkh_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
 
-	render_free_spirv(vertexCode);
-	render_free_spirv(fragmentCode);
+	vkh_free_spirv(vertexCode);
+	vkh_free_spirv(fragmentCode);
 
 	// create shader stages:
 	//---------------
@@ -1095,8 +1095,8 @@ static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 
 	// free shader modules:
 	//---------------
-	render_destroy_shader_module(s->instance, vertexModule);
-	render_destroy_shader_module(s->instance, fragmentModule);
+	vkh_destroy_shader_module(s->instance, vertexModule);
+	vkh_destroy_shader_module(s->instance, fragmentModule);
 
 	return true;
 }
@@ -1133,13 +1133,13 @@ static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 	// compile:
 	//---------------
 	uint64 computeCodeSize;
-	uint32 *computeCode = render_load_spirv("assets/spirv/galaxy_particle.comp.spv", &computeCodeSize);
+	uint32 *computeCode = vkh_load_spirv("assets/spirv/galaxy_particle.comp.spv", &computeCodeSize);
 
 	// create shader modules:
 	//---------------
-	VkShaderModule computeModule = render_create_shader_module(s->instance, computeCodeSize, computeCode);
+	VkShaderModule computeModule = vkh_create_shader_module(s->instance, computeCodeSize, computeCode);
 
-	render_free_spirv(computeCode);
+	vkh_free_spirv(computeCode);
 
 	// create shader stages:
 	//---------------
@@ -1186,7 +1186,7 @@ static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 
 	// free shader modules:
 	//---------------
-	render_destroy_shader_module(s->instance, computeModule);
+	vkh_destroy_shader_module(s->instance, computeModule);
 
 	return true;
 }
@@ -1203,7 +1203,7 @@ static bool _draw_create_gparticle_buffer(DrawState* s)
 	s->numGparticles = 0;
 	s->gparticleBufferSize = 1024 * sizeof(GalaxyParticle); //default allocate 1024 elements, will resize if necessary
 
-	s->gparticleBuffer = render_create_buffer(s->instance, s->gparticleBufferSize,
+	s->gparticleBuffer = vkh_create_buffer(s->instance, s->gparticleBufferSize,
 												VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 												VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gparticleBufferMemory);
 
@@ -1212,7 +1212,7 @@ static bool _draw_create_gparticle_buffer(DrawState* s)
 
 static void _draw_destroy_gparticle_buffer(DrawState* s)
 {
-	render_destroy_buffer(s->instance, s->gparticleBuffer, s->gparticleBufferMemory);
+	vkh_destroy_buffer(s->instance, s->gparticleBuffer, s->gparticleBufferMemory);
 }
 
 static bool _draw_create_gparticle_graphics_descriptors(DrawState* s)
@@ -1385,9 +1385,9 @@ static void _draw_record_render_pass_command_buffer(DrawState* s, VkCommandBuffe
 	//---------------
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
-	viewport.y = (float)s->instance->swapchainExtent.height;
-	viewport.width = (float)s->instance->swapchainExtent.width;
-	viewport.height = -(float)s->instance->swapchainExtent.height;
+	viewport.y = (f32)s->instance->swapchainExtent.height;
+	viewport.width = (f32)s->instance->swapchainExtent.width;
+	viewport.height = -(f32)s->instance->swapchainExtent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -1425,11 +1425,11 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 	//---------------
 	int32 windowW, windowH;
 	glfwGetWindowSize(s->instance->window, &windowW, &windowH);	//TODO: FIGURE OUT WHY IT GETS CUT OFF WITH VERY TALL WINDOWS
-	float aspect = (float)windowW / (float)windowH;
+	f32 aspect = (f32)windowW / (f32)windowH;
 	if(aspect < 1.0f)
 		aspect = 1.0f / aspect;
 
-	float size = aspect * powf(2.0f, roundf(log2f(params->cam.dist) + 0.5f));
+	f32 size = aspect * powf(2.0f, roundf(log2f(params->cam.dist) + 0.5f));
 
 	qm::vec3 pos = params->cam.target;
 	for(int32 i = 0; i < 3; i++)
@@ -1442,8 +1442,8 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 
 	//send fragment stage params:
 	//---------------
-	float thickness = 0.0125f;
-	float scroll = (params->cam.dist - powf(2.0f, roundf(log2f(params->cam.dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(params->cam.dist) - 1.5f))) + 0.5f;
+	f32 thickness = 0.0125f;
+	f32 scroll = (params->cam.dist - powf(2.0f, roundf(log2f(params->cam.dist) - 0.5f))) / (4.0f * powf(2.0f, roundf(log2f(params->cam.dist) - 1.5f))) + 0.5f;
 	qm::vec3 offset3 = (params->cam.target - pos) / size;
 	qm::vec2 offset = qm::vec2(offset3.x, offset3.z);
 
@@ -1479,7 +1479,7 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 	uint32 dynamicOffset = 0;
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipelineLayout, 0, 1, &s->gparticleComputeDescriptorSet, 1, &dynamicOffset);
 
-	ParticleComputeParamsGPU computeParams = { (float)glfwGetTime() };
+	ParticleComputeParamsGPU computeParams = { (f32)glfwGetTime() };
 	vkCmdPushConstants(commandBuffer, s->gparticleComputePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
 
 	vkCmdDispatch(commandBuffer, 1, 1, 1);
@@ -1513,7 +1513,7 @@ static void _draw_window_resized(DrawState* s)
 	if (w == 0 || h == 0)
 		return;
 
-	render_resize_swapchain(s->instance, w, h);
+	vkh_resize_swapchain(s->instance, w, h);
 
 	_draw_destroy_depth_buffer(s);
 	_draw_create_depth_buffer(s);

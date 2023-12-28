@@ -1,8 +1,10 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-#include "libs/render.hpp"
+#include "libs/vkh/vkh.h"
 #include "libs/quickmath.hpp"
+
+#include "globals.hpp"
 
 //----------------------------------------------------------------------------//
 
@@ -10,7 +12,7 @@
 
 struct DrawState
 {
-	RenderInstance* instance;
+	VKHinstance* instance;
 
 	//drawing objects:
 	VkFormat depthFormat;

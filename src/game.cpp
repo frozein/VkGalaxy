@@ -10,20 +10,20 @@
 //----------------------------------------------------------------------------//
 
 bool _game_camera_init(GameCamera* cam);
-void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window);
-void _game_camera_cursor_moved(GameCamera* cam, float x, float y);
-void _game_camera_scroll(GameCamera* cam, float amt);
+void _game_camera_update(GameCamera* cam, f32 dt, GLFWwindow* window);
+void _game_camera_cursor_moved(GameCamera* cam, f32 x, f32 y);
+void _game_camera_scroll(GameCamera* cam, f32 amt);
 
 //----------------------------------------------------------------------------//
 
-void _game_cursor_pos_callback(GLFWwindow* window, double x, double y);
-void _game_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-void _game_scroll_callback(GLFWwindow* window, double x, double y);
+void _game_cursor_pos_callback(GLFWwindow* window, f64 x, f64 y);
+void _game_key_callback(GLFWwindow* window, int32 key, int32 scancode, int32 action, int32 mods);
+void _game_scroll_callback(GLFWwindow* window, f64 x, f64 y);
 
 //----------------------------------------------------------------------------//
 
 template<typename T>
-void _game_decay_to(T& value, T target, float rate, float dt);
+void _game_decay_to(T& value, T target, f32 rate, f32 dt);
 
 //----------------------------------------------------------------------------//
 
@@ -58,8 +58,6 @@ bool game_init(GameState** state)
 		return false;
 	}
 
-	//glfwSetInputMode(s->drawState->instance->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
 	glfwSetWindowUserPointer(s->drawState->instance->window, s);
 	glfwSetCursorPosCallback(s->drawState->instance->window, _game_cursor_pos_callback);
 	glfwSetKeyCallback(s->drawState->instance->window, _game_key_callback);
@@ -78,12 +76,12 @@ void game_quit(GameState* s)
 
 void game_main_loop(GameState* s)
 {
-	float lastTime = (float)glfwGetTime();
+	f32 lastTime = (f32)glfwGetTime();
 
 	while(!glfwWindowShouldClose(s->drawState->instance->window))
 	{
-		float curTime = (float)glfwGetTime();
-		float dt = curTime - lastTime;
+		f32 curTime = (f32)glfwGetTime();
+		f32 dt = curTime - lastTime;
 		lastTime = curTime;
 
 		_game_camera_update(&s->cam, dt, s->drawState->instance->window);
@@ -121,11 +119,11 @@ bool _game_camera_init(GameCamera* cam)
 	return true;
 }
 
-void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window)
+void _game_camera_update(GameCamera* cam, f32 dt, GLFWwindow* window)
 {
-	float camSpeed = 1.0f * dt * cam->dist;
-	float angleSpeed = 45.0f * dt;
-	float tiltSpeed = 30.0f * dt;
+	f32 camSpeed = 1.0f * dt * cam->dist;
+	f32 angleSpeed = 45.0f * dt;
+	f32 tiltSpeed = 30.0f * dt;
 
 	qm::vec4 forward4 = qm::rotate(cam->up, cam->angle) * qm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
 	qm::vec4 side4 = qm::rotate(cam->up, cam->angle) * qm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
@@ -164,12 +162,12 @@ void _game_camera_update(GameCamera* cam, float dt, GLFWwindow* window)
 	cam->pos = cam->center - cam->dist * qm::normalize(qm::vec3(toPos.x, toPos.y, toPos.z));
 }
 
-void _game_camera_cursor_moved(GameCamera* cam, float x, float y)
+void _game_camera_cursor_moved(GameCamera* cam, f32 x, f32 y)
 {
 
 }
 
-void _game_camera_scroll(GameCamera* cam, float amt)
+void _game_camera_scroll(GameCamera* cam, f32 amt)
 {
 	cam->targetDist -= 0.1f * cam->targetDist * amt;
 	cam->targetDist = roundf(cam->targetDist * 100.0f) / 100.0f;
@@ -183,31 +181,31 @@ void _game_camera_scroll(GameCamera* cam, float amt)
 
 //----------------------------------------------------------------------------//
 
-void _game_cursor_pos_callback(GLFWwindow* window, double x, double y)
+void _game_cursor_pos_callback(GLFWwindow* window, f64 x, f64 y)
 {
 	GameState* s = (GameState*)glfwGetWindowUserPointer(window);
 
-	_game_camera_cursor_moved(&s->cam, (float)x, (float)y);
+	_game_camera_cursor_moved(&s->cam, (f32)x, (f32)y);
 }
 
-void _game_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void _game_key_callback(GLFWwindow* window, int32 key, int32 scancode, int32 action, int32 mods)
 {
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-void _game_scroll_callback(GLFWwindow* window, double x, double y)
+void _game_scroll_callback(GLFWwindow* window, f64 x, f64 y)
 {
 	GameState* s = (GameState*)glfwGetWindowUserPointer(window);
 
 	if(y != 0.0)
-		_game_camera_scroll(&s->cam, (float)y);
+		_game_camera_scroll(&s->cam, (f32)y);
 }
 
 //----------------------------------------------------------------------------//
 
 template<typename T>
-void _game_decay_to(T& value, T target, float rate, float dt)
+void _game_decay_to(T& value, T target, f32 rate, f32 dt)
 {
 	value = value + (target - value) * (1.0f - powf(rate, 1000.0f * dt));
 }

@@ -14,7 +14,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # find source files:
-file(GLOB_RECURSE vulkancraft_src CONFIGURE_DEPENDS "src/*.cpp")
+file(GLOB_RECURSE vulkancraft_src CONFIGURE_DEPENDS "src/*.cpp" "src/*.c")
 add_executable(${PROJECT_NAME} ${vulkancraft_src})
 
 # find include diretories and libraries
