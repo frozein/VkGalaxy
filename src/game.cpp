@@ -28,10 +28,10 @@ void _game_decay_to(T& value, T target, f32 rate, f32 dt);
 //----------------------------------------------------------------------------//
 
 static void _game_message_log(const char* message, const char* file, int32 line);
-#define MSG_LOG(m) _game_message_log(m, __FILE__, __LINE__)
+#define MSG_LOG(m) _game_message_log(m, __FILENAME__, __LINE__)
 
 static void _game_error_log(const char* message, const char* file, int32 line);
-#define ERROR_LOG(m) _game_error_log(m, __FILE__, __LINE__)
+#define ERROR_LOG(m) _game_error_log(m, __FILENAME__, __LINE__)
 
 //----------------------------------------------------------------------------//
 

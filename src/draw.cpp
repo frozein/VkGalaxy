@@ -102,10 +102,10 @@ static void _draw_window_resized(DrawState* state);
 //----------------------------------------------------------------------------//
 
 static void _draw_message_log(const char *message, const char *file, int32 line);
-#define MSG_LOG(m) _draw_message_log(m, __FILE__, __LINE__)
+#define MSG_LOG(m) _draw_message_log(m, __FILENAME__, __LINE__)
 
 static void _draw_error_log(const char *message, const char *file, int32 line);
-#define ERROR_LOG(m) _draw_error_log(m, __FILE__, __LINE__)
+#define ERROR_LOG(m) _draw_error_log(m, __FILENAME__, __LINE__)
 
 //----------------------------------------------------------------------------//
 

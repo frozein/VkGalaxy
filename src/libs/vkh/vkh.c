@@ -6,33 +6,33 @@
 
 //----------------------------------------------------------------------------//
 
-static vkh_bool_t _render_init_glfw(VKHinstance* instance, uint32_t w, uint32_t h, const char* name);
-static void _render_quit_glfw(VKHinstance* instance);
+static vkh_bool_t _vkh_init_glfw(VKHinstance* instance, uint32_t w, uint32_t h, const char* name);
+static void _vkh_quit_glfw(VKHinstance* instance);
 
-static vkh_bool_t _render_create_vk_instance(VKHinstance* instance, const char* name);
-static void _render_destroy_vk_instance(VKHinstance* instance);
+static vkh_bool_t _vkh_create_vk_instance(VKHinstance* instance, const char* name);
+static void _vkh_destroy_vk_instance(VKHinstance* instance);
 
-static vkh_bool_t _render_pick_physical_device(VKHinstance* instance);
+static vkh_bool_t _vkh_pick_physical_device(VKHinstance* instance);
 
-static vkh_bool_t _render_create_device(VKHinstance* instance);
-static void _render_destroy_vk_device(VKHinstance* instance);
+static vkh_bool_t _vkh_create_device(VKHinstance* instance);
+static void _vkh_destroy_vk_device(VKHinstance* instance);
 
-static vkh_bool_t _render_create_swapchain(VKHinstance* instance, uint32_t w, uint32_t h);
-static void _render_destroy_swapchain(VKHinstance* instance);
+static vkh_bool_t _vkh_create_swapchain(VKHinstance* instance, uint32_t w, uint32_t h);
+static void _vkh_destroy_swapchain(VKHinstance* instance);
 
-static vkh_bool_t _render_create_command_pool(VKHinstance* instance);
-static void _render_destroy_command_pool(VKHinstance* instance);
-
-//----------------------------------------------------------------------------//
-
-static VkCommandBuffer _render_start_single_time_command(VKHinstance* instance);
-static void _render_end_single_time_command(VKHinstance* instance, VkCommandBuffer buffer);
-
-static uint32_t _render_find_memory_type(VKHinstance* instance, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+static vkh_bool_t _vkh_create_command_pool(VKHinstance* instance);
+static void _vkh_destroy_command_pool(VKHinstance* instance);
 
 //----------------------------------------------------------------------------//
 
-static VKAPI_ATTR VkBool32 _render_vk_debug_callback(
+static VkCommandBuffer _vkh_start_single_time_command(VKHinstance* instance);
+static void _vkh_end_single_time_command(VKHinstance* instance, VkCommandBuffer buffer);
+
+static uint32_t _vkh_find_memory_type(VKHinstance* instance, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+//----------------------------------------------------------------------------//
+
+static VKAPI_ATTR VkBool32 _vkh_vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT sevrerity,
 	VkDebugUtilsMessageTypeFlagsEXT type,
 	const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
@@ -41,11 +41,17 @@ static VKAPI_ATTR VkBool32 _render_vk_debug_callback(
 
 //----------------------------------------------------------------------------//
 
-static void _render_message_log(const char* message, const char* file, int32_t line);
-#define MSG_LOG(m) _render_message_log(m, __FILE__, __LINE__)
+#ifdef _WIN32
+	#define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+#else
+	#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#endif
 
-static void _render_error_log(const char* message, const char* file, int32_t line);
-#define ERROR_LOG(m) _render_error_log(m, __FILE__, __LINE__)
+static void _vkh_message_log(const char* message, const char* file, int32_t line);
+#define MSG_LOG(m) _vkh_message_log(m, __FILENAME__, __LINE__)
+
+static void _vkh_error_log(const char* message, const char* file, int32_t line);
+#define ERROR_LOG(m) _vkh_error_log(m, __FILENAME__, __LINE__)
 
 //----------------------------------------------------------------------------//
 
@@ -64,22 +70,22 @@ vkh_bool_t vkh_init(VKHinstance** instance, uint32_t windowW, uint32_t windowH, 
 	*instance = (VKHinstance*)malloc(sizeof(VKHinstance));
 	VKHinstance* inst = *instance;
 
-	if(!_render_init_glfw(inst, windowW, windowH, windowName))
+	if(!_vkh_init_glfw(inst, windowW, windowH, windowName))
 		return VKH_FALSE;
 
-	if(!_render_create_vk_instance(inst, windowName))
+	if(!_vkh_create_vk_instance(inst, windowName))
 		return VKH_FALSE;
 
-	if(!_render_pick_physical_device(inst))
+	if(!_vkh_pick_physical_device(inst))
 		return VKH_FALSE;
 
-	if(!_render_create_device(inst))
+	if(!_vkh_create_device(inst))
 		return VKH_FALSE;
 
-	if(!_render_create_swapchain(inst, windowW, windowH))
+	if(!_vkh_create_swapchain(inst, windowW, windowH))
 		return VKH_FALSE;
 
-	if(!_render_create_command_pool(inst))
+	if(!_vkh_create_command_pool(inst))
 		return VKH_FALSE;
 
 	return VKH_TRUE;
@@ -87,11 +93,11 @@ vkh_bool_t vkh_init(VKHinstance** instance, uint32_t windowW, uint32_t windowH, 
 
 void vkh_quit(VKHinstance* inst)
 {
-	_render_destroy_command_pool(inst);
-	_render_destroy_swapchain(inst);
-	_render_destroy_vk_device(inst);
-	_render_destroy_vk_instance(inst);
-	_render_quit_glfw(inst);
+	_vkh_destroy_command_pool(inst);
+	_vkh_destroy_swapchain(inst);
+	_vkh_destroy_vk_device(inst);
+	_vkh_destroy_vk_instance(inst);
+	_vkh_quit_glfw(inst);
 
 	free(inst);
 }
@@ -105,8 +111,8 @@ void vkh_resize_swapchain(VKHinstance* inst, uint32_t w, uint32_t h)
 	
 	vkDeviceWaitIdle(inst->device);
 
-	_render_destroy_swapchain(inst);
-	_render_create_swapchain(inst, w, h);
+	_vkh_destroy_swapchain(inst);
+	_vkh_create_swapchain(inst, w, h);
 }
 
 //----------------------------------------------------------------------------//
@@ -142,7 +148,7 @@ VkImage vkh_create_image(VKHinstance* inst, uint32_t w, uint32_t h, uint32_t mip
 	VkMemoryAllocateInfo allocInfo = {0};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = _render_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
+	allocInfo.memoryTypeIndex = _vkh_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
 
 	if(vkAllocateMemory(inst->device, &allocInfo, NULL, memory) != VK_SUCCESS)
 	{
@@ -206,7 +212,7 @@ VkBuffer vkh_create_buffer(VKHinstance* inst, VkDeviceSize size, VkBufferUsageFl
 	VkMemoryAllocateInfo allocInfo = {0};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = _render_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
+	allocInfo.memoryTypeIndex = _vkh_find_memory_type(inst, memRequirements.memoryTypeBits, properties);
 
 	if(vkAllocateMemory(inst->device, &allocInfo, NULL, memory) != VK_SUCCESS)
 	{
@@ -227,7 +233,7 @@ void vkh_destroy_buffer(VKHinstance* inst, VkBuffer buffer, VkDeviceMemory memor
 
 void vkh_copy_buffer(VKHinstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize size, uint64_t srcOffset, uint64_t dstOffset)
 {
-	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
 
 	VkBufferCopy copyRegion = {0};
 	copyRegion.srcOffset = srcOffset;
@@ -235,12 +241,12 @@ void vkh_copy_buffer(VKHinstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize
 	copyRegion.size = size;
 	vkCmdCopyBuffer(commandBuffer, src, dst, 1, &copyRegion);
 
-	_render_end_single_time_command(inst, commandBuffer);
+	_vkh_end_single_time_command(inst, commandBuffer);
 }
 
-void render_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+void vkh_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 {
-	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
 
 	VkBufferImageCopy region = {0};
 	region.bufferOffset = 0;
@@ -255,7 +261,7 @@ void render_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage ima
 
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	_render_end_single_time_command(inst, commandBuffer);
+	_vkh_end_single_time_command(inst, commandBuffer);
 }
 
 void vkh_upload_with_staging_buffer(VKHinstance* inst, VkBuffer stagingBuf, VkDeviceMemory stagingBufMem, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
@@ -281,7 +287,7 @@ void vkh_upload_with_staging_buffer_implicit(VKHinstance* inst, VkBuffer buf, ui
 
 void vkh_transition_image_layout(VKHinstance* inst, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
 {
-	VkCommandBuffer commandBuffer = _render_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
 
 	VkImageMemoryBarrier barrier = {0};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -324,7 +330,7 @@ void vkh_transition_image_layout(VKHinstance* inst, VkImage image, VkFormat form
 
 	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
-	_render_end_single_time_command(inst, commandBuffer);
+	_vkh_end_single_time_command(inst, commandBuffer);
 }
 
 uint32_t* vkh_load_spirv(const char* path, uint64_t* size)
@@ -381,7 +387,7 @@ void vkh_destroy_shader_module(VKHinstance* inst, VkShaderModule module)
 
 //----------------------------------------------------------------------------//
 
-static vkh_bool_t _render_init_glfw(VKHinstance* inst, uint32_t w, uint32_t h, const char* name)
+static vkh_bool_t _vkh_init_glfw(VKHinstance* inst, uint32_t w, uint32_t h, const char* name)
 {
 	MSG_LOG("initlalizing GLFW...");
 
@@ -404,7 +410,7 @@ static vkh_bool_t _render_init_glfw(VKHinstance* inst, uint32_t w, uint32_t h, c
 	return VKH_TRUE;
 }
 
-static void _render_quit_glfw(VKHinstance* inst)
+static void _vkh_quit_glfw(VKHinstance* inst)
 {
 	MSG_LOG("quitting GLFW...");
 
@@ -412,14 +418,14 @@ static void _render_quit_glfw(VKHinstance* inst)
 	glfwTerminate();
 }
 
-static vkh_bool_t _render_create_vk_instance(VKHinstance* inst, const char* name)
+static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 {
 	MSG_LOG("creating Vulkan instance...");
 
 	//get required GLFW extensions:
 	//---------------
 	uint32_t requiredExtensionCount;
-	const char** requiredExtensions = glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
+	char** requiredExtensions = (char**)glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
 	if(!requiredExtensions)
 	{
 		ERROR_LOG("Vulkan rendering not supported on this machine");
@@ -429,8 +435,8 @@ static vkh_bool_t _render_create_vk_instance(VKHinstance* inst, const char* name
 
 	#if VKH_VALIDATION_LAYERS
 	{
-		const char** requiredExtensionsValidation = (const char**)malloc((requiredExtensionCount + 1) * sizeof(const char*));
-		memcpy(requiredExtensionsValidation, requiredExtensions, requiredExtensionCount * sizeof(const char*));
+		char** requiredExtensionsValidation = (char**)malloc((requiredExtensionCount + 1) * sizeof(char*));
+		memcpy(requiredExtensionsValidation, requiredExtensions, requiredExtensionCount * sizeof(char*));
 		requiredExtensionsValidation[requiredExtensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 
 		requiredExtensionCount++;
@@ -527,7 +533,7 @@ static vkh_bool_t _render_create_vk_instance(VKHinstance* inst, const char* name
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 		debugInfo.messageType = 
 			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-		debugInfo.pfnUserCallback = _render_vk_debug_callback;
+		debugInfo.pfnUserCallback = _vkh_vk_debug_callback;
 		debugInfo.pUserData = inst;
 
 		instanceInfo.pNext = &debugInfo;
@@ -574,7 +580,7 @@ static vkh_bool_t _render_create_vk_instance(VKHinstance* inst, const char* name
 	return VKH_TRUE;
 }
 
-static void _render_destroy_vk_instance(VKHinstance* inst)
+static void _vkh_destroy_vk_instance(VKHinstance* inst)
 {
 	MSG_LOG("destroying Vulkan instance...");
 
@@ -595,7 +601,7 @@ static void _render_destroy_vk_instance(VKHinstance* inst)
 	vkDestroyInstance(inst->instance, NULL);
 }
 
-static vkh_bool_t _render_pick_physical_device(VKHinstance* inst)
+static vkh_bool_t _vkh_pick_physical_device(VKHinstance* inst)
 {
 	MSG_LOG("picking physical device...");
 
@@ -726,7 +732,7 @@ static vkh_bool_t _render_pick_physical_device(VKHinstance* inst)
 	return VKH_TRUE;
 }
 
-static vkh_bool_t _render_create_device(VKHinstance* inst)
+static vkh_bool_t _vkh_create_device(VKHinstance* inst)
 {
 	MSG_LOG("creating Vulkan device...");
 
@@ -796,14 +802,14 @@ static vkh_bool_t _render_create_device(VKHinstance* inst)
 	return VKH_TRUE;
 }
 
-static void _render_destroy_vk_device(VKHinstance* inst)
+static void _vkh_destroy_vk_device(VKHinstance* inst)
 {
 	MSG_LOG("destroying Vulkan device...");
 
 	vkDestroyDevice(inst->device, NULL);
 }
 
-static vkh_bool_t _render_create_swapchain(VKHinstance* inst, uint32_t w, uint32_t h)
+static vkh_bool_t _vkh_create_swapchain(VKHinstance* inst, uint32_t w, uint32_t h)
 {
 	MSG_LOG("creating Vulkan swapchain...");
 
@@ -913,7 +919,7 @@ static vkh_bool_t _render_create_swapchain(VKHinstance* inst, uint32_t w, uint32
 	return VKH_TRUE;
 }
 
-static void _render_destroy_swapchain(VKHinstance* inst)
+static void _vkh_destroy_swapchain(VKHinstance* inst)
 {
 	MSG_LOG("destroying Vulkan swapchain...");
 
@@ -926,7 +932,7 @@ static void _render_destroy_swapchain(VKHinstance* inst)
 	vkDestroySwapchainKHR(inst->device, inst->swapchain, NULL);
 }
 
-static vkh_bool_t _render_create_command_pool(VKHinstance* inst)
+static vkh_bool_t _vkh_create_command_pool(VKHinstance* inst)
 {
 	MSG_LOG("creating command pool...");
 
@@ -944,7 +950,7 @@ static vkh_bool_t _render_create_command_pool(VKHinstance* inst)
 	return VKH_TRUE;
 }
 
-static void _render_destroy_command_pool(VKHinstance* inst)
+static void _vkh_destroy_command_pool(VKHinstance* inst)
 {
 	MSG_LOG("destroying command pool...");
 
@@ -953,7 +959,7 @@ static void _render_destroy_command_pool(VKHinstance* inst)
 
 //----------------------------------------------------------------------------//
 
-static VkCommandBuffer _render_start_single_time_command(VKHinstance* inst)
+static VkCommandBuffer _vkh_start_single_time_command(VKHinstance* inst)
 {
 	VkCommandBufferAllocateInfo allocInfo = {0};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -972,7 +978,7 @@ static VkCommandBuffer _render_start_single_time_command(VKHinstance* inst)
 	return commandBuffer;
 }
 
-static void _render_end_single_time_command(VKHinstance* inst, VkCommandBuffer commandBuffer)
+static void _vkh_end_single_time_command(VKHinstance* inst, VkCommandBuffer commandBuffer)
 {
 	vkEndCommandBuffer(commandBuffer);
 
@@ -987,7 +993,7 @@ static void _render_end_single_time_command(VKHinstance* inst, VkCommandBuffer c
 	vkFreeCommandBuffers(inst->device, inst->commandPool, 1, &commandBuffer);
 }
 
-static uint32_t _render_find_memory_type(VKHinstance* inst, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+static uint32_t _vkh_find_memory_type(VKHinstance* inst, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(inst->physicalDevice, &memProperties);
@@ -1002,7 +1008,7 @@ static uint32_t _render_find_memory_type(VKHinstance* inst, uint32_t typeFilter,
 
 //----------------------------------------------------------------------------//
 
-static VKAPI_ATTR VkBool32 _render_vk_debug_callback(
+static VKAPI_ATTR VkBool32 _vkh_vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT sevrerity,
 	VkDebugUtilsMessageTypeFlagsEXT type,
 	const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
@@ -1011,18 +1017,18 @@ static VKAPI_ATTR VkBool32 _render_vk_debug_callback(
 	if(sevrerity < VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 		return VK_FALSE;
 
-	printf("RENDER VALIDATION LAYER - %s\n\n", callbackData->pMessage);
+	printf("VKH VALIDATION LAYER - %s\n\n", callbackData->pMessage);
 	return VK_FALSE;
 }
 
 //----------------------------------------------------------------------------//
 
-static void _render_message_log(const char* message, const char* file, int32_t line)
+static void _vkh_message_log(const char* message, const char* file, int32_t line)
 {
-	printf("RENDER MESSAGE in %s at line %i - \"%s\"\n\n", file, line, message);
+	printf("VKH MESSAGE in %s at line %i - \"%s\"\n\n", file, line, message);
 }
 
-static void _render_error_log(const char* message, const char* file, int32_t line)
+static void _vkh_error_log(const char* message, const char* file, int32_t line)
 {
-	printf("RENDER ERROR in %s at line %i - \"%s\"\n\n", file, line, message);
+	printf("VKH ERROR in %s at line %i - \"%s\"\n\n", file, line, message);
 }
