@@ -43,28 +43,20 @@ struct DrawState
 	VkBuffer quadIndexBuffer;
 	VkDeviceMemory quadIndexBufferMemory;
 
-	//grid pipeline objects:
-	VkDescriptorSetLayout gridPipelineDescriptorLayout;
-	VkPipelineLayout gridPipelineLayout;
-	VkPipeline gridPipeline;
-
-	VkDescriptorPool gridDescriptorPool;
-	VkDescriptorSet gridDescriptorSets[FRAMES_IN_FLIGHT];
+	//grid pipeline object
+	VKHgraphicsPipeline* gridPipeline;
+	VKHdescriptorSets* gridDescriptorSets;
 
 	//galaxy particle pipeline objects:
 	uint64 numGparticles;
 
-	VkDescriptorSetLayout gparticleRenderPipelineDescriptorLayout;
-	VkPipelineLayout gparticleRenderPipelineLayout;
-	VkPipeline gparticleRenderPipeline;
-	VkDescriptorPool gparticleRenderDescriptorPool;
-	VkDescriptorSet gparticleRenderDescriptorSets[FRAMES_IN_FLIGHT];
+	VKHgraphicsPipeline* particlePipeline;
+	VKHdescriptorSets* particleDescriptorSets;
 
 	VkDescriptorSetLayout gparticleComputePipelineDescriptorLayout;
 	VkPipelineLayout gparticleComputePipelineLayout;
 	VkPipeline gparticleComputePipeline;
-	VkDescriptorPool gparticleComputeDescriptorPool;
-	VkDescriptorSet gparticleComputeDescriptorSet;
+	VKHdescriptorSets* particleComputeDescriptorSets;
 
 	VkDeviceSize gparticleBufferSize;
 	VkBuffer gparticleBuffer;

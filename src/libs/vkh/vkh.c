@@ -264,7 +264,7 @@ void vkh_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage image,
 	_vkh_end_single_time_command(inst, commandBuffer);
 }
 
-void vkh_upload_with_staging_buffer(VKHinstance* inst, VkBuffer stagingBuf, VkDeviceMemory stagingBufMem, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
+void vkh_copy_with_staging_buf(VKHinstance* inst, VkBuffer stagingBuf, VkDeviceMemory stagingBufMem, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
 {
 	void* mem;
 	vkMapMemory(inst->device, stagingBufMem, 0, size, 0, &mem);
@@ -274,13 +274,13 @@ void vkh_upload_with_staging_buffer(VKHinstance* inst, VkBuffer stagingBuf, VkDe
 	vkh_copy_buffer(inst, stagingBuf, buf, size, 0, offset);
 }
 
-void vkh_upload_with_staging_buffer_implicit(VKHinstance* inst, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
+void vkh_copy_with_staging_buf_implicit(VKHinstance* inst, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
 {
 	VkDeviceMemory stagingBufferMemory;
 	VkBuffer stagingBuffer = vkh_create_buffer(inst, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBufferMemory);
 
-	vkh_upload_with_staging_buffer(inst, stagingBuffer, stagingBufferMemory, buf, size, offset, data);
+	vkh_copy_with_staging_buf(inst, stagingBuffer, stagingBufferMemory, buf, size, offset, data);
 
 	vkh_destroy_buffer(inst, stagingBuffer, stagingBufferMemory);
 }
@@ -383,6 +383,538 @@ VkShaderModule vkh_create_shader_module(VKHinstance* inst, uint64_t codeSize, ui
 void vkh_destroy_shader_module(VKHinstance* inst, VkShaderModule module)
 {
 	vkDestroyShaderModule(inst->device, module, NULL);
+}
+
+//----------------------------------------------------------------------------//
+
+VKHgraphicsPipeline* vkh_pipeline_create()
+{
+	VKHgraphicsPipeline* pipeline = (VKHgraphicsPipeline*)malloc(sizeof(VKHgraphicsPipeline));
+	if(!pipeline)
+		return NULL;
+
+	pipeline->descSetBindings       = qd_dynarray_create(sizeof(VkDescriptorSetLayoutBinding), NULL);
+	pipeline->dynamicStates         = qd_dynarray_create(sizeof(VkDynamicState), NULL);
+	pipeline->vertInputBindings     = qd_dynarray_create(sizeof(VkVertexInputBindingDescription), NULL);
+	pipeline->vertInputAttribs    = qd_dynarray_create(sizeof(VkVertexInputAttributeDescription), NULL);
+	pipeline->viewports             = qd_dynarray_create(sizeof(VkViewport), NULL);
+	pipeline->scissors              = qd_dynarray_create(sizeof(VkRect2D), NULL);
+	pipeline->colorBlendAttachments = qd_dynarray_create(sizeof(VkPipelineColorBlendAttachmentState), NULL);
+	pipeline->pushConstants         = qd_dynarray_create(sizeof(VkPushConstantRange), NULL);
+
+	pipeline->vertShader = VK_NULL_HANDLE;
+	pipeline->fragShader = VK_NULL_HANDLE;
+
+	pipeline->inputAssemblyState = (VkPipelineInputAssemblyStateCreateInfo){0};
+	pipeline->inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	pipeline->inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	pipeline->inputAssemblyState.primitiveRestartEnable = VK_FALSE;
+
+	pipeline->tesselationState = (VkPipelineTessellationStateCreateInfo){0};
+	pipeline->tesselationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+	pipeline->tesselationState.patchControlPoints = 1;
+
+	pipeline->rasterState = (VkPipelineRasterizationStateCreateInfo){0};
+	pipeline->rasterState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	pipeline->rasterState.depthClampEnable = VK_FALSE;
+	pipeline->rasterState.rasterizerDiscardEnable = VK_FALSE;
+	pipeline->rasterState.polygonMode = VK_POLYGON_MODE_FILL;
+	pipeline->rasterState.cullMode = VK_CULL_MODE_NONE;
+	pipeline->rasterState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	pipeline->rasterState.depthBiasEnable = VK_FALSE;
+	pipeline->rasterState.depthBiasConstantFactor = 0.0f;
+	pipeline->rasterState.depthBiasClamp = 0.0f;
+	pipeline->rasterState.depthBiasSlopeFactor = 0.0f;
+	pipeline->rasterState.lineWidth = 1.0f; //we dont allow this to be changed as its not really useful or supported
+
+	pipeline->multisampleState = (VkPipelineMultisampleStateCreateInfo){0};
+	pipeline->multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	pipeline->multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	pipeline->multisampleState.sampleShadingEnable = VK_FALSE;
+	pipeline->multisampleState.minSampleShading = 1.0f;
+	pipeline->multisampleState.pSampleMask = NULL;
+	pipeline->multisampleState.alphaToCoverageEnable = VK_FALSE;
+	pipeline->multisampleState.alphaToOneEnable = VK_FALSE;
+
+	pipeline->depthStencilState = (VkPipelineDepthStencilStateCreateInfo){0};
+	pipeline->depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	pipeline->depthStencilState.depthTestEnable = VK_TRUE;
+	pipeline->depthStencilState.depthWriteEnable = VK_TRUE;
+	pipeline->depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+	pipeline->depthStencilState.depthBoundsTestEnable = VK_FALSE;
+	pipeline->depthStencilState.stencilTestEnable = VK_FALSE;
+	pipeline->depthStencilState.front = (VkStencilOpState){0};
+	pipeline->depthStencilState.back = (VkStencilOpState){0};
+	pipeline->depthStencilState.minDepthBounds = 0.0f;
+	pipeline->depthStencilState.maxDepthBounds = 1.0f;
+
+	pipeline->colorBlendState = (VkPipelineColorBlendStateCreateInfo){0};
+	pipeline->colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	pipeline->colorBlendState.logicOpEnable = VK_FALSE;
+	pipeline->colorBlendState.logicOp = VK_LOGIC_OP_COPY;
+	pipeline->colorBlendState.blendConstants[0] = 0.0f;
+	pipeline->colorBlendState.blendConstants[1] = 0.0f;
+	pipeline->colorBlendState.blendConstants[2] = 0.0f;
+	pipeline->colorBlendState.blendConstants[3] = 0.0f;
+
+	pipeline->generated = VKH_FALSE;
+	pipeline->descriptorLayout = VK_NULL_HANDLE;
+	pipeline->layout           = VK_NULL_HANDLE;
+	pipeline->pipeline         = VK_NULL_HANDLE;
+
+	return pipeline;
+}
+
+void vkh_pipeline_destroy(VKHgraphicsPipeline* pipeline)
+{
+	if(pipeline->generated)
+	{
+		ERROR_LOG("you must call vkh_pipeline_cleanup() before calling vkh_pipeline_destroy()");
+		return;
+	}
+
+	qd_dynarray_free(pipeline->descSetBindings);
+	qd_dynarray_free(pipeline->dynamicStates);
+	qd_dynarray_free(pipeline->vertInputBindings);
+	qd_dynarray_free(pipeline->vertInputAttribs);
+	qd_dynarray_free(pipeline->viewports);
+	qd_dynarray_free(pipeline->scissors);
+	qd_dynarray_free(pipeline->colorBlendAttachments);
+	qd_dynarray_free(pipeline->pushConstants);
+
+	free(pipeline);
+}
+
+vkh_bool_t vkh_pipeline_generate(VKHgraphicsPipeline* pipeline, VKHinstance* inst, VkRenderPass renderPass, uint32_t subpass)
+{
+	if(pipeline->generated)
+	{
+		ERROR_LOG("pipeline has already been generated, call vkh_pipeline_cleanup() before generating again");
+		return VKH_FALSE;
+	}
+
+	//create descriptor set layout:
+	//---------------
+	VkDescriptorSetLayoutCreateInfo descSetLayoutInfo = {0};
+	descSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descSetLayoutInfo.bindingCount = (uint32_t)pipeline->descSetBindings->len;
+	descSetLayoutInfo.pBindings = pipeline->descSetBindings->arr;
+
+	if(vkCreateDescriptorSetLayout(inst->device, &descSetLayoutInfo, NULL, &pipeline->descriptorLayout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create pipeline descriptor set layout");
+		return VKH_FALSE;
+	}
+
+	//create pipeline layout:
+	//---------------
+	VkPipelineLayoutCreateInfo layoutInfo = {0};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layoutInfo.setLayoutCount = 1; //TODO: support more than 1 descriptor layout
+	layoutInfo.pSetLayouts = &pipeline->descriptorLayout;
+	layoutInfo.pushConstantRangeCount = (uint32_t)pipeline->pushConstants->len;
+	layoutInfo.pPushConstantRanges = pipeline->pushConstants->arr;
+
+	if(vkCreatePipelineLayout(inst->device, &layoutInfo, NULL, &pipeline->layout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create pipeline layout");
+		return VKH_FALSE;
+	}
+
+	//create intermediate create infos:
+	//---------------
+	QDdynArray* shaderStages = qd_dynarray_create(sizeof(VkPipelineShaderStageCreateInfo), NULL);
+	
+	if(pipeline->vertShader != VK_NULL_HANDLE)
+	{
+		VkPipelineShaderStageCreateInfo vertStage = {0};
+		vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertStage.module = pipeline->vertShader;
+		vertStage.pName = "main";
+
+		qd_dynarray_push(shaderStages, &vertStage);
+	}
+
+	if(pipeline->fragShader != VK_NULL_HANDLE)
+	{
+		VkPipelineShaderStageCreateInfo fragStage = {0};
+		fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragStage.module = pipeline->fragShader;
+		fragStage.pName = "main";
+
+		qd_dynarray_push(shaderStages, &fragStage);
+	}
+
+	VkPipelineVertexInputStateCreateInfo vertInputInfo = {0};
+	vertInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertInputInfo.vertexBindingDescriptionCount = (uint32_t)pipeline->vertInputBindings->len;
+	vertInputInfo.pVertexBindingDescriptions = pipeline->vertInputBindings->arr;
+	vertInputInfo.vertexAttributeDescriptionCount = (uint32_t)pipeline->vertInputAttribs->len;
+	vertInputInfo.pVertexAttributeDescriptions = pipeline->vertInputAttribs->arr;
+
+	VkPipelineViewportStateCreateInfo viewportInfo = {0};
+	viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportInfo.viewportCount = (uint32_t)pipeline->viewports->len;
+	viewportInfo.pViewports = pipeline->viewports->arr;
+	viewportInfo.scissorCount = (uint32_t)pipeline->scissors->len;
+	viewportInfo.pScissors = pipeline->scissors->arr;
+
+	for(int32_t i = 0; i < (int32_t)pipeline->dynamicStates->len; i++) //if dynamic, only 1 viewport/scissor
+	{
+		VkDynamicState dynState = *(VkDynamicState*)qd_dynarray_get(pipeline->dynamicStates, i);
+
+		if(dynState == VK_DYNAMIC_STATE_VIEWPORT)
+			viewportInfo.viewportCount = 1;
+		if(dynState == VK_DYNAMIC_STATE_SCISSOR)
+			viewportInfo.scissorCount = 1;
+	}
+
+	VkPipelineDynamicStateCreateInfo dynamicStateInfo = {0};
+	dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateInfo.dynamicStateCount = (uint32_t)pipeline->dynamicStates->len;
+	dynamicStateInfo.pDynamicStates = pipeline->dynamicStates->arr;
+
+	pipeline->colorBlendState.attachmentCount = (uint32_t)pipeline->colorBlendAttachments->len;
+	pipeline->colorBlendState.pAttachments = pipeline->colorBlendAttachments->arr;
+
+	//create pipeline:
+	//---------------
+	VkGraphicsPipelineCreateInfo pipelineInfo = {0};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineInfo.stageCount = (uint32_t)shaderStages->len;
+	pipelineInfo.pStages = shaderStages->arr;
+	pipelineInfo.pVertexInputState = &vertInputInfo;
+	pipelineInfo.pInputAssemblyState = &pipeline->inputAssemblyState;
+	pipelineInfo.pTessellationState = &pipeline->tesselationState;
+	pipelineInfo.pViewportState = &viewportInfo;
+	pipelineInfo.pRasterizationState = &pipeline->rasterState;
+	pipelineInfo.pMultisampleState = &pipeline->multisampleState;
+	pipelineInfo.pDepthStencilState = &pipeline->depthStencilState;
+	pipelineInfo.pColorBlendState = &pipeline->colorBlendState;
+	pipelineInfo.pDynamicState = &dynamicStateInfo;
+	pipelineInfo.layout = pipeline->layout;
+	pipelineInfo.renderPass = renderPass;
+	pipelineInfo.subpass = subpass;
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = -1;
+
+	if(vkCreateGraphicsPipelines(inst->device, VK_NULL_HANDLE,  1, &pipelineInfo, NULL, &pipeline->pipeline) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create graphics pipeline");
+		return VKH_FALSE;
+	}
+
+	//cleanup:
+	//---------------
+	qd_dynarray_free(shaderStages);
+
+	pipeline->generated = VKH_TRUE;
+	return VKH_TRUE;
+}
+
+void vkh_pipeline_cleanup(VKHgraphicsPipeline* pipeline, VKHinstance* inst)
+{
+	if(!pipeline->generated)
+		return;
+
+	vkDestroyPipeline           (inst->device, pipeline->pipeline, NULL);
+	vkDestroyPipelineLayout     (inst->device, pipeline->layout, NULL);
+	vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
+
+	pipeline->generated = VKH_FALSE;
+}
+
+void vkh_pipeline_add_desc_set_binding(VKHgraphicsPipeline* pipeline, VkDescriptorSetLayoutBinding binding)
+{
+	qd_dynarray_push(pipeline->descSetBindings, &binding);
+}
+
+void vkh_pipeline_add_dynamic_state(VKHgraphicsPipeline* pipeline, VkDynamicState state)
+{
+	qd_dynarray_push(pipeline->dynamicStates, &state);
+}
+
+void vkh_pipeline_add_vertex_input_binding(VKHgraphicsPipeline* pipeline, VkVertexInputBindingDescription binding)
+{
+	qd_dynarray_push(pipeline->vertInputBindings, &binding);
+}
+
+void vkh_pipeline_add_vertex_input_attrib(VKHgraphicsPipeline* pipeline, VkVertexInputAttributeDescription attrib)
+{
+	qd_dynarray_push(pipeline->vertInputAttribs, &attrib);
+}
+
+void vkh_pipeline_add_viewport(VKHgraphicsPipeline* pipeline, VkViewport viewport)
+{
+	qd_dynarray_push(pipeline->viewports, &viewport);
+}
+
+void vkh_pipeline_add_scissor(VKHgraphicsPipeline* pipeline, VkRect2D scissor)
+{
+	qd_dynarray_push(pipeline->scissors, &scissor);
+}
+
+void vkh_pipeline_add_color_blend_attachment(VKHgraphicsPipeline* pipeline, VkPipelineColorBlendAttachmentState attachment)
+{
+	qd_dynarray_push(pipeline->colorBlendAttachments, &attachment);
+}
+
+void vkh_pipeline_add_push_constant(VKHgraphicsPipeline* pipeline, VkPushConstantRange pushConstant)
+{
+	qd_dynarray_push(pipeline->pushConstants, &pushConstant);
+}
+
+void vkh_pipeline_set_vert_shader(VKHgraphicsPipeline* pipeline, VkShaderModule shader)
+{
+	pipeline->vertShader = shader;
+}
+
+void vkh_pipeline_set_frag_shader(VKHgraphicsPipeline* pipeline, VkShaderModule shader)
+{
+	pipeline->fragShader = shader;
+}
+
+void vkh_pipeline_set_input_assembly_state(VKHgraphicsPipeline* pipeline, VkPrimitiveTopology topology, VkBool32 primitiveRestart)
+{
+	pipeline->inputAssemblyState.topology = topology;
+	pipeline->inputAssemblyState.primitiveRestartEnable = primitiveRestart;
+}
+
+void vkh_pipeline_set_tesselation_state(VKHgraphicsPipeline* pipeline, uint32_t patchControlPoints)
+{
+	pipeline->tesselationState.patchControlPoints = patchControlPoints;
+}
+
+void vkh_pipeline_set_raster_state(VKHgraphicsPipeline* pipeline, VkBool32 depthClamp, VkBool32 rasterDiscard, VkPolygonMode polyMode,
+                                   VkCullModeFlags cullMode, VkFrontFace frontFace, VkBool32 depthBias, float biasConstFactor, float biasClamp, float biasSlopeFactor)
+{
+	pipeline->rasterState.depthClampEnable = depthClamp;
+	pipeline->rasterState.rasterizerDiscardEnable = rasterDiscard;
+	pipeline->rasterState.polygonMode = polyMode;
+	pipeline->rasterState.cullMode = cullMode;
+	pipeline->rasterState.frontFace = frontFace;
+	pipeline->rasterState.depthBiasEnable = depthBias;
+	pipeline->rasterState.depthBiasConstantFactor = biasConstFactor;
+	pipeline->rasterState.depthBiasClamp = biasClamp;
+	pipeline->rasterState.depthBiasSlopeFactor = biasSlopeFactor;
+}
+
+void vkh_pipeline_set_multisample_state(VKHgraphicsPipeline* pipeline, VkSampleCountFlagBits rasterSamples, VkBool32 sampleShading,
+                                        float minSampleShading, const VkSampleMask* sampleMask, VkBool32 alphaToCoverage, VkBool32 alphaToOne)
+{
+	pipeline->multisampleState.rasterizationSamples = rasterSamples;
+	pipeline->multisampleState.sampleShadingEnable = sampleShading;
+	pipeline->multisampleState.minSampleShading = minSampleShading;
+	pipeline->multisampleState.pSampleMask = sampleMask;
+	pipeline->multisampleState.alphaToCoverageEnable = alphaToCoverage;
+	pipeline->multisampleState.alphaToOneEnable = alphaToOne;
+}
+
+void vkh_pipeline_set_depth_stencil_state(VKHgraphicsPipeline* pipeline, VkBool32 depthTest, VkBool32 depthWrite, VkCompareOp depthCompareOp,
+                                          VkBool32 depthBoundsTest, VkBool32 stencilTest, VkStencilOpState front, VkStencilOpState back, float minDepthBound, float maxDepthBound)
+{
+	pipeline->depthStencilState.depthTestEnable = depthTest;
+	pipeline->depthStencilState.depthWriteEnable = depthWrite;
+	pipeline->depthStencilState.depthCompareOp = depthCompareOp;
+	pipeline->depthStencilState.depthBoundsTestEnable = depthBoundsTest;
+	pipeline->depthStencilState.stencilTestEnable = stencilTest;
+	pipeline->depthStencilState.front = front;
+	pipeline->depthStencilState.back = back;
+	pipeline->depthStencilState.minDepthBounds = minDepthBound;
+	pipeline->depthStencilState.maxDepthBounds = maxDepthBound;
+}
+
+void vkh_pipeline_set_color_blend_state(VKHgraphicsPipeline* pipeline, VkBool32 logicOpEnable, VkLogicOp logicOp, float rBlendConstant,
+                                        float gBlendConstant, float bBlendConstant, float aBlendConstant)
+{
+	pipeline->colorBlendState.logicOpEnable = logicOpEnable;
+	pipeline->colorBlendState.logicOp = logicOp;
+	pipeline->colorBlendState.blendConstants[0] = rBlendConstant;
+	pipeline->colorBlendState.blendConstants[1] = gBlendConstant;
+	pipeline->colorBlendState.blendConstants[2] = bBlendConstant;
+	pipeline->colorBlendState.blendConstants[3] = aBlendConstant;
+}
+
+//----------------------------------------------------------------------------//
+
+VKHdescriptorSets* vkh_descriptor_sets_create(uint32_t count)
+{
+	VKHdescriptorSets* descriptorSets = (VKHdescriptorSets*)malloc(sizeof(VKHdescriptorSets));
+	if(!descriptorSets)
+		return NULL;
+
+	descriptorSets->count = count;
+
+	descriptorSets->descriptors = qd_dynarray_create(sizeof(VKHdescriptorInfo), NULL);
+
+	descriptorSets->generated = VKH_FALSE;
+	descriptorSets->pool = VK_NULL_HANDLE;
+	descriptorSets->sets = (VkDescriptorSet*)malloc(descriptorSets->count * sizeof(VkDescriptorSet));
+
+	return descriptorSets;
+}
+
+void vkh_descriptor_sets_destroy(VKHdescriptorSets* descriptorSets)
+{
+	if(descriptorSets->generated)
+	{
+		ERROR_LOG("you must call vkh_descriptor_sets_cleanup() before calling vkh_descriptor_sets_destroy()");
+		return;
+	}
+
+	qd_dynarray_free(descriptorSets->descriptors);
+	free(descriptorSets->sets);
+
+	free(descriptorSets);
+}
+
+vkh_bool_t vkh_desctiptor_sets_generate(VKHdescriptorSets* descriptorSets, VKHinstance* inst, VkDescriptorSetLayout layout)
+{
+	if(descriptorSets->generated)
+	{
+		ERROR_LOG("descriptor sets have already been generated, call vkh_descriptor_sets_cleanup() before generating again");
+		return VKH_FALSE;
+	}
+
+	//create pool:
+	//---------------
+	QDdynArray* poolSizes = qd_dynarray_create(sizeof(VkDescriptorPoolSize), NULL);
+
+	for(size_t i = 0; i < descriptorSets->descriptors->len; i++)
+	{
+		VkDescriptorType type = ((VKHdescriptorInfo*)qd_dynarray_get(descriptorSets->descriptors, i))->type;
+
+		vkh_bool_t found = VKH_FALSE;
+		for(size_t j = 0; j < poolSizes->len; j++)
+		{
+			if(((VkDescriptorPoolSize*)qd_dynarray_get(poolSizes, j))->type == type)
+			{
+				((VkDescriptorPoolSize*)qd_dynarray_get(poolSizes, j))->descriptorCount++;
+				found = VKH_TRUE;
+				break;
+			}
+		}
+
+		if(!found)
+		{
+			VkDescriptorPoolSize poolSize = {0};
+			poolSize.type = type;
+			poolSize.descriptorCount = 1;
+
+			qd_dynarray_push(poolSizes, &poolSize);
+		}
+	}
+
+	VkDescriptorPoolCreateInfo poolInfo = {0};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = (uint32_t)poolSizes->len;
+	poolInfo.pPoolSizes = poolSizes->arr;
+	poolInfo.maxSets = descriptorSets->count;
+
+	if(vkCreateDescriptorPool(inst->device, &poolInfo, NULL, &descriptorSets->pool) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create descriptor pool");
+		return VKH_FALSE;
+	}
+
+	//create sets:
+	//---------------
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(descriptorSets->count * sizeof(VkDescriptorSetLayout));
+	for(uint32_t i = 0; i < descriptorSets->count; i++)
+		layouts[i] = layout;
+
+	VkDescriptorSetAllocateInfo setAllocInfo = {0};
+	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	setAllocInfo.descriptorPool = descriptorSets->pool;
+	setAllocInfo.descriptorSetCount = descriptorSets->count;
+	setAllocInfo.pSetLayouts = layouts;
+
+	if (vkAllocateDescriptorSets(inst->device, &setAllocInfo, descriptorSets->sets) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to allocate descriptor sets");
+		return VKH_FALSE;
+	}
+
+	//write descriptors:
+	//---------------
+	VkWriteDescriptorSet* writes = (VkWriteDescriptorSet*)calloc(descriptorSets->descriptors->len, sizeof(VkWriteDescriptorSet));
+
+	for(size_t i = 0; i < descriptorSets->descriptors->len; i++)
+	{
+		VKHdescriptorInfo* info = (VKHdescriptorInfo*)qd_dynarray_get(descriptorSets->descriptors, i);
+
+		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[i].dstSet = descriptorSets->sets[info->index];
+		writes[i].dstBinding = info->binding;
+		writes[i].dstArrayElement = info->arrayElem;
+		writes[i].descriptorType = info->type;
+		writes[i].descriptorCount = info->count;
+		writes[i].pBufferInfo = info->bufferInfos;
+		writes[i].pImageInfo = info->imageInfos;
+		writes[i].pTexelBufferView = info->texelBufferViews;
+	}
+
+	vkUpdateDescriptorSets(inst->device, (uint32_t)descriptorSets->descriptors->len, writes, 0, NULL);
+
+	//cleanup:
+	//---------------
+	qd_dynarray_free(poolSizes);
+	free(layouts);
+	free(writes);
+
+	return VKH_TRUE;
+}
+
+void vkh_descriptor_sets_cleanup(VKHdescriptorSets* descriptorSets, VKHinstance* inst)
+{
+	if(!descriptorSets->generated)
+		return;
+
+	vkDestroyDescriptorPool(inst->device, descriptorSets->pool, NULL);
+}
+
+void vkh_descriptor_sets_add_buffers(VKHdescriptorSets* descriptorSets, uint32_t index, VkDescriptorType type, uint32_t binding, uint32_t arrayElem, 
+                                     uint32_t count, VkDescriptorBufferInfo* bufferInfos)
+{
+	VKHdescriptorInfo info;
+	info.index = index;
+	info.type = type;
+	info.binding = binding;
+	info.arrayElem = arrayElem;
+	info.count = count;
+	info.bufferInfos = bufferInfos;
+
+	qd_dynarray_push(descriptorSets->descriptors, &info);
+}
+
+void vkh_descriptor_sets_add_images(VKHdescriptorSets* descriptorSets, uint32_t index, VkDescriptorType type, uint32_t binding, uint32_t arrayElem, 
+                                    uint32_t count, VkDescriptorImageInfo* imageInfos)
+{
+	VKHdescriptorInfo info;
+	info.index = index;
+	info.type = type;
+	info.binding = binding;
+	info.arrayElem = arrayElem;
+	info.count = count;
+	info.imageInfos = imageInfos;
+
+	qd_dynarray_push(descriptorSets->descriptors, &info);
+}
+
+void vkh_descriptor_sets_add_texel_views(VKHdescriptorSets* descriptorSets, uint32_t index, VkDescriptorType type, uint32_t binding, uint32_t arrayElem, 
+                                         uint32_t count, VkBufferView* texelViews)
+{
+	VKHdescriptorInfo info;
+	info.index = index;
+	info.type = type;
+	info.binding = binding;
+	info.arrayElem = arrayElem;
+	info.count = count;
+	info.texelBufferViews = texelViews;
+
+	qd_dynarray_push(descriptorSets->descriptors, &info);
 }
 
 //----------------------------------------------------------------------------//

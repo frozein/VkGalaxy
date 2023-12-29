@@ -241,7 +241,7 @@ void draw_render(DrawState* s, DrawParams* params)
 	camBuffer.view = view;
 	camBuffer.proj = projection;
 	camBuffer.viewProj = projection * view;
-	vkh_upload_with_staging_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
+	vkh_copy_with_staging_buf(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
 									  s->cameraBuffers[frameIdx], sizeof(CameraGPU), 0, &camBuffer);
 
 	// RECORD COMMAND BUFFER:
@@ -561,12 +561,12 @@ static bool _draw_create_quad_vertex_buffer(DrawState* s)
 	s->quadVertexBuffer = vkh_create_buffer(s->instance, sizeof(verts),
 												  VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 												  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadVertexBufferMemory);
-	vkh_upload_with_staging_buffer_implicit(s->instance, s->quadVertexBuffer, sizeof(verts), 0, verts);
+	vkh_copy_with_staging_buf_implicit(s->instance, s->quadVertexBuffer, sizeof(verts), 0, verts);
 
 	s->quadIndexBuffer = vkh_create_buffer(s->instance, sizeof(indices),
 												 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 												 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->quadIndexBufferMemory);
-	vkh_upload_with_staging_buffer_implicit(s->instance, s->quadIndexBuffer, sizeof(indices), 0, indices);
+	vkh_copy_with_staging_buf_implicit(s->instance, s->quadIndexBuffer, sizeof(indices), 0, indices);
 
 	return true;
 }
@@ -581,7 +581,25 @@ static void _draw_destroy_quad_vertex_buffer(DrawState* s)
 
 static bool _draw_create_grid_pipeline(DrawState* s)
 {
-	// create descriptor set layout:
+	//create pipeline object:
+	//---------------
+	s->gridPipeline = vkh_pipeline_create();
+	if(!s->gridPipeline)
+		return false;
+
+	//set shaders:
+	//---------------
+	uint64 vertCodeSize, fragCodeSize;
+	uint32 *vertCode = vkh_load_spirv("assets/spirv/grid.vert.spv", &vertCodeSize);
+	uint32 *fragCode = vkh_load_spirv("assets/spirv/grid.frag.spv", &fragCodeSize);
+
+	VkShaderModule vertModule = vkh_create_shader_module(s->instance, vertCodeSize, vertCode);
+	VkShaderModule fragModule = vkh_create_shader_module(s->instance, fragCodeSize, fragCode);
+
+	vkh_pipeline_set_vert_shader(s->gridPipeline, vertModule);
+	vkh_pipeline_set_frag_shader(s->gridPipeline, fragModule);
+
+	//add descriptor set layout bindings:
 	//---------------
 	VkDescriptorSetLayoutBinding storageLayoutBinding = {};
 	storageLayoutBinding.binding = 0;
@@ -590,162 +608,52 @@ static bool _draw_create_grid_pipeline(DrawState* s)
 	storageLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	storageLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBinding layouts[1] = { storageLayoutBinding };
+	vkh_pipeline_add_desc_set_binding(s->gridPipeline, storageLayoutBinding);
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = layouts;
-
-	if (vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->gridPipelineDescriptorLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create descriptor set layout for grid pipeline");
-		return false;
-	}
-
-	// compile:
+	//add dynamic states:
 	//---------------
-	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32 *vertexCode = vkh_load_spirv("assets/spirv/grid.vert.spv", &vertexCodeSize);
-	uint32 *fragmentCode = vkh_load_spirv("assets/spirv/grid.frag.spv", &fragmentCodeSize);
+	vkh_pipeline_add_dynamic_state(s->gridPipeline, VK_DYNAMIC_STATE_VIEWPORT);
+	vkh_pipeline_add_dynamic_state(s->gridPipeline, VK_DYNAMIC_STATE_SCISSOR);
 
-	// create shader modules:
+	//add vertex input info:
 	//---------------
-	VkShaderModule vertexModule = vkh_create_shader_module(s->instance, vertexCodeSize, vertexCode);
-	VkShaderModule fragmentModule = vkh_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
+	VkVertexInputBindingDescription vertBindingDescription = {};
+	vertBindingDescription.binding = 0;
+	vertBindingDescription.stride = sizeof(Vertex);
+	vertBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	vkh_free_spirv(vertexCode);
-	vkh_free_spirv(fragmentCode);
+	vkh_pipeline_add_vertex_input_binding(s->gridPipeline, vertBindingDescription);
 
-	// create shader stages:
+	VkVertexInputAttributeDescription vertPositionAttrib = {};
+	vertPositionAttrib.binding = 0;
+	vertPositionAttrib.location = 0;
+	vertPositionAttrib.format = VK_FORMAT_R32G32B32_SFLOAT;
+	vertPositionAttrib.offset = offsetof(Vertex, pos);
+
+	VkVertexInputAttributeDescription vertTexCoordAttrib = {};
+	vertTexCoordAttrib.binding = 0;
+	vertTexCoordAttrib.location = 1;
+	vertTexCoordAttrib.format = VK_FORMAT_R32G32_SFLOAT;
+	vertTexCoordAttrib.offset = offsetof(Vertex, texCoord);
+
+	vkh_pipeline_add_vertex_input_attrib(s->gridPipeline, vertPositionAttrib);
+	vkh_pipeline_add_vertex_input_attrib(s->gridPipeline, vertTexCoordAttrib);
+
+	//add color blend attachments:
 	//---------------
-	VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo = {};
-	vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	vertShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageCreateInfo.module = vertexModule;
-	vertShaderStageCreateInfo.pName = "main";
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
-	VkPipelineShaderStageCreateInfo fragShaderStagCreateInfo = {};
-	fragShaderStagCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	fragShaderStagCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	fragShaderStagCreateInfo.module = fragmentModule;
-	fragShaderStagCreateInfo.pName = "main";
+	vkh_pipeline_add_color_blend_attachment(s->gridPipeline, colorBlendAttachment);
 
-	VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageCreateInfo, fragShaderStagCreateInfo};
-
-	// create dynamic state:
-	//---------------
-	const uint32 dynamicStateCount = 2;
-	const VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-
-	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
-	dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicStateCreateInfo.dynamicStateCount = dynamicStateCount;
-	dynamicStateCreateInfo.pDynamicStates = dynamicStates;
-
-	// create vertex input info:
-	//---------------
-	VkVertexInputBindingDescription vertexBindingDescription = {};
-	vertexBindingDescription.binding = 0;
-	vertexBindingDescription.stride = sizeof(Vertex);
-	vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	const uint32 vertexAttributeCount = 2;
-	VkVertexInputAttributeDescription vertexAttributeDescriptions[3] = {};
-
-	// pos:
-	vertexAttributeDescriptions[0].binding = 0;
-	vertexAttributeDescriptions[0].location = 0;
-	vertexAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	vertexAttributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-	// tex coord:
-	vertexAttributeDescriptions[1].binding = 0;
-	vertexAttributeDescriptions[1].location = 1;
-	vertexAttributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	vertexAttributeDescriptions[1].offset = offsetof(Vertex, texCoord);
-
-	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
-	vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
-	vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertexBindingDescription;
-	vertexInputStateCreateInfo.vertexAttributeDescriptionCount = vertexAttributeCount;
-	vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions;
-
-	// create input assembly state:
-	//---------------
-	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
-	inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
-
-	// create viewport state (dynmaic so only need to specify counts):
-	//---------------
-	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
-	viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewportStateCreateInfo.viewportCount = 1;
-	viewportStateCreateInfo.scissorCount = 1;
-
-	// create rasterization state:
-	//---------------
-	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = {};
-	rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
-	rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-	rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizationStateCreateInfo.lineWidth = 1.0f;
-	rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE; // TODO: turn this back on
-	rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-	rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
-	rasterizationStateCreateInfo.depthBiasConstantFactor = 0.0f;
-	rasterizationStateCreateInfo.depthBiasClamp = 0.0f;
-	rasterizationStateCreateInfo.depthBiasSlopeFactor = 0.0f;
-
-	// create multisample state:
-	//---------------
-	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
-	multisampleStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampleStateCreateInfo.sampleShadingEnable = VK_FALSE;
-	multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-	multisampleStateCreateInfo.minSampleShading = 1.0f;
-	multisampleStateCreateInfo.pSampleMask = nullptr;
-	multisampleStateCreateInfo.alphaToCoverageEnable = VK_FALSE;
-	multisampleStateCreateInfo.alphaToOneEnable = VK_FALSE;
-
-	// create depth and stencil state:
-	//---------------
-	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = {};
-	depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencilCreateInfo.depthTestEnable = VK_TRUE;
-	depthStencilCreateInfo.depthWriteEnable = VK_TRUE;
-	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
-	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-
-	// create color blend state:
-	//---------------
-	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};
-	colorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachmentState.blendEnable = VK_FALSE;
-	colorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-
-	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {};
-	colorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
-	colorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;
-	colorBlendStateCreateInfo.attachmentCount = 1;
-	colorBlendStateCreateInfo.pAttachments = &colorBlendAttachmentState;
-	colorBlendStateCreateInfo.blendConstants[0] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[1] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[2] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[3] = 0.0f;
-
-	// create push constsant ranges:
+	//add push constsants:
 	//---------------
 	VkPushConstantRange vertPushConstant = {};
 	vertPushConstant.offset = 0;
@@ -757,131 +665,93 @@ static bool _draw_create_grid_pipeline(DrawState* s)
 	fragPushConstant.size = sizeof(GridParamsFragGPU);
 	fragPushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkPushConstantRange pushConstants[] = {vertPushConstant, fragPushConstant};
+	vkh_pipeline_add_push_constant(s->gridPipeline, vertPushConstant);
+	vkh_pipeline_add_push_constant(s->gridPipeline, fragPushConstant);
 
-	// create pipeline layout:
+	//set states:
 	//---------------
-	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutCreateInfo.setLayoutCount = 1;
-	pipelineLayoutCreateInfo.pSetLayouts = &s->gridPipelineDescriptorLayout;
-	pipelineLayoutCreateInfo.pushConstantRangeCount = 2;
-	pipelineLayoutCreateInfo.pPushConstantRanges = pushConstants;
+	vkh_pipeline_set_input_assembly_state(s->gridPipeline, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE);
 
-	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gridPipelineLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create grid pipeline layout");
+	vkh_pipeline_set_raster_state(s->gridPipeline, VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE,
+		VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FALSE, 0.0f, 0.0f, 0.0f);
+
+	vkh_pipeline_set_multisample_state(s->gridPipeline, VK_SAMPLE_COUNT_1_BIT, VK_FALSE, 1.0f, NULL, VK_FALSE, VK_FALSE);
+
+	vkh_pipeline_set_depth_stencil_state(s->gridPipeline, VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
+
+	vkh_pipeline_set_color_blend_state(s->gridPipeline, VK_FALSE, VK_LOGIC_OP_COPY, 0.0f, 0.0f, 0.0f, 0.0f);
+
+	//generate pipeline:
+	//---------------
+	if(!vkh_pipeline_generate(s->gridPipeline, s->instance, s->finalRenderPass, 0))
 		return false;
-	}
 
-	// create pipeline:
+	//cleanup:
 	//---------------
-	VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
-	pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineCreateInfo.stageCount = 2;
-	pipelineCreateInfo.pStages = shaderStages;
-	pipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
-	pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
-	pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
-	pipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
-	pipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
-	pipelineCreateInfo.pDepthStencilState = &depthStencilCreateInfo;
-	pipelineCreateInfo.pColorBlendState = &colorBlendStateCreateInfo;
-	pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
-	pipelineCreateInfo.layout = s->gridPipelineLayout;
-	pipelineCreateInfo.renderPass = s->finalRenderPass;
-	pipelineCreateInfo.subpass = 0;
-	pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineCreateInfo.basePipelineIndex = -1;
+	vkh_free_spirv(vertCode);
+	vkh_free_spirv(fragCode);
 
-	if (vkCreateGraphicsPipelines(s->instance->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &s->gridPipeline) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create grid pipeline");
-		return false;
-	}
-
-	// free shader modules:
-	//---------------
-	vkh_destroy_shader_module(s->instance, vertexModule);
-	vkh_destroy_shader_module(s->instance, fragmentModule);
+	vkh_destroy_shader_module(s->instance, vertModule);
+	vkh_destroy_shader_module(s->instance, fragModule);
 
 	return true;
 }
 
 static void _draw_destroy_grid_pipeline(DrawState* s)
 {
-	vkDestroyPipeline(s->instance->device, s->gridPipeline, NULL);
-	vkDestroyPipelineLayout(s->instance->device, s->gridPipelineLayout, NULL);
-	vkDestroyDescriptorSetLayout(s->instance->device, s->gridPipelineDescriptorLayout, NULL);
+	vkh_pipeline_cleanup(s->gridPipeline, s->instance);
+	vkh_pipeline_destroy(s->gridPipeline);
 }
 
 static bool _draw_create_grid_descriptors(DrawState* s)
 {
-	VkDescriptorPoolSize poolSizes[1] = {};
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = FRAMES_IN_FLIGHT;
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = poolSizes;
-	poolInfo.maxSets = FRAMES_IN_FLIGHT;
-
-	if (vkCreateDescriptorPool(s->instance->device, &poolInfo, nullptr, &s->gridDescriptorPool) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create grid descriptor pool");
+	s->gridDescriptorSets = vkh_descriptor_sets_create(FRAMES_IN_FLIGHT);
+	if(!s->gridDescriptorSets)
 		return false;
-	}
 
-	VkDescriptorSetLayout layouts[FRAMES_IN_FLIGHT];
+	VkDescriptorBufferInfo cameraBufferInfos[FRAMES_IN_FLIGHT];
 	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
-		layouts[i] = s->gridPipelineDescriptorLayout;
-
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = s->gridDescriptorPool;
-	allocInfo.descriptorSetCount = FRAMES_IN_FLIGHT;
-	allocInfo.pSetLayouts = layouts;
-
-	if (vkAllocateDescriptorSets(s->instance->device, &allocInfo, s->gridDescriptorSets) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to allocate grid descriptor sets");
-		return false;
+		cameraBufferInfos[i].buffer = s->cameraBuffers[i];
+		cameraBufferInfos[i].offset = 0;
+		cameraBufferInfos[i].range = sizeof(CameraGPU);
+
+		vkh_descriptor_sets_add_buffers(s->gridDescriptorSets, i, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+			0, 0, 1, &cameraBufferInfos[i]);
 	}
 
-	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
-	{
-		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = s->cameraBuffers[i];
-		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(CameraGPU); // TODO: figure out if this can be set dynamically?
-
-		VkWriteDescriptorSet descriptorWrites[1] = {};
-
-		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = s->gridDescriptorSets[i];
-		descriptorWrites[0].dstBinding = 0;
-		descriptorWrites[0].dstArrayElement = 0;
-		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrites[0].descriptorCount = 1;
-		descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-		vkUpdateDescriptorSets(s->instance->device, 1, descriptorWrites, 0, nullptr);
-	}
-
-	return true;
+	return vkh_desctiptor_sets_generate(s->gridDescriptorSets, s->instance, s->gridPipeline->descriptorLayout);
 }
 
 static void _draw_destroy_grid_descriptors(DrawState* s)
 {
-	vkDestroyDescriptorPool(s->instance->device, s->gridDescriptorPool, NULL);
+	vkh_descriptor_sets_cleanup(s->gridDescriptorSets, s->instance);
+	vkh_descriptor_sets_destroy(s->gridDescriptorSets);
 }
 
 //----------------------------------------------------------------------------//
 
 static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 {
-	// create descriptor set layout:
+	//create pipeline object:
+	//---------------
+	s->particlePipeline = vkh_pipeline_create();
+	if(!s->particlePipeline)
+		return false;
+
+	//set shaders:
+	//---------------
+	uint64 vertCodeSize, fragCodeSize;
+	uint32 *vertCode = vkh_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertCodeSize);
+	uint32 *fragCode = vkh_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragCodeSize);
+
+	VkShaderModule vertModule = vkh_create_shader_module(s->instance, vertCodeSize, vertCode);
+	VkShaderModule fragModule = vkh_create_shader_module(s->instance, fragCodeSize, fragCode);
+
+	vkh_pipeline_set_vert_shader(s->particlePipeline, vertModule);
+	vkh_pipeline_set_frag_shader(s->particlePipeline, fragModule);
+
+	//add descriptor set layout bindings:
 	//---------------
 	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
 	cameraLayoutBinding.binding = 0;
@@ -897,215 +767,100 @@ static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 	perInstanceLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	perInstanceLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBinding layouts[2] = { cameraLayoutBinding, perInstanceLayoutBinding };
+	vkh_pipeline_add_desc_set_binding(s->particlePipeline, cameraLayoutBinding);
+	vkh_pipeline_add_desc_set_binding(s->particlePipeline, perInstanceLayoutBinding);
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 2;
-	layoutInfo.pBindings = layouts;
+	//add dynamic states:
+	//---------------
+	vkh_pipeline_add_dynamic_state(s->particlePipeline, VK_DYNAMIC_STATE_VIEWPORT);
+	vkh_pipeline_add_dynamic_state(s->particlePipeline, VK_DYNAMIC_STATE_SCISSOR);
 
-	if (vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->gparticleRenderPipelineDescriptorLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create descriptor set layout for galaxy particle pipeline");
+	//add vertex input info:
+	//---------------
+	VkVertexInputBindingDescription vertBindingDescription = {};
+	vertBindingDescription.binding = 0;
+	vertBindingDescription.stride = sizeof(Vertex);
+	vertBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	vkh_pipeline_add_vertex_input_binding(s->particlePipeline, vertBindingDescription);
+
+	VkVertexInputAttributeDescription vertPositionAttrib = {};
+	vertPositionAttrib.binding = 0;
+	vertPositionAttrib.location = 0;
+	vertPositionAttrib.format = VK_FORMAT_R32G32B32_SFLOAT;
+	vertPositionAttrib.offset = offsetof(Vertex, pos);
+
+	VkVertexInputAttributeDescription vertTexCoordAttrib = {};
+	vertTexCoordAttrib.binding = 0;
+	vertTexCoordAttrib.location = 1;
+	vertTexCoordAttrib.format = VK_FORMAT_R32G32_SFLOAT;
+	vertTexCoordAttrib.offset = offsetof(Vertex, texCoord);
+
+	vkh_pipeline_add_vertex_input_attrib(s->particlePipeline, vertPositionAttrib);
+	vkh_pipeline_add_vertex_input_attrib(s->particlePipeline, vertTexCoordAttrib);
+
+	//add color blend attachments:
+	//---------------
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	vkh_pipeline_add_color_blend_attachment(s->particlePipeline, colorBlendAttachment);
+
+	//add push constsants:
+	//---------------
+	VkPushConstantRange vertPushConstant = {};
+	vertPushConstant.offset = 0;
+	vertPushConstant.size = sizeof(GridParamsVertGPU);
+	vertPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPushConstantRange fragPushConstant = {};
+	fragPushConstant.offset = sizeof(GridParamsVertGPU);
+	fragPushConstant.size = sizeof(GridParamsFragGPU);
+	fragPushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	vkh_pipeline_add_push_constant(s->particlePipeline, vertPushConstant);
+	vkh_pipeline_add_push_constant(s->particlePipeline, fragPushConstant);
+
+	//set states:
+	//---------------
+	vkh_pipeline_set_input_assembly_state(s->particlePipeline, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE);
+
+	vkh_pipeline_set_raster_state(s->particlePipeline, VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE,
+		VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FALSE, 0.0f, 0.0f, 0.0f);
+
+	vkh_pipeline_set_multisample_state(s->particlePipeline, VK_SAMPLE_COUNT_1_BIT, VK_FALSE, 1.0f, NULL, VK_FALSE, VK_FALSE);
+
+	vkh_pipeline_set_depth_stencil_state(s->particlePipeline, VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
+
+	vkh_pipeline_set_color_blend_state(s->particlePipeline, VK_FALSE, VK_LOGIC_OP_COPY, 0.0f, 0.0f, 0.0f, 0.0f);
+
+	//generate pipeline:
+	//---------------
+	if(!vkh_pipeline_generate(s->particlePipeline, s->instance, s->finalRenderPass, 0))
 		return false;
-	}
 
-	// compile:
+	//cleanup:
 	//---------------
-	uint64 vertexCodeSize, fragmentCodeSize;
-	uint32 *vertexCode = vkh_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertexCodeSize);
-	uint32 *fragmentCode = vkh_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragmentCodeSize);
+	vkh_free_spirv(vertCode);
+	vkh_free_spirv(fragCode);
 
-	// create shader modules:
-	//---------------
-	VkShaderModule vertexModule = vkh_create_shader_module(s->instance, vertexCodeSize, vertexCode);
-	VkShaderModule fragmentModule = vkh_create_shader_module(s->instance, fragmentCodeSize, fragmentCode);
-
-	vkh_free_spirv(vertexCode);
-	vkh_free_spirv(fragmentCode);
-
-	// create shader stages:
-	//---------------
-	VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo = {};
-	vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	vertShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageCreateInfo.module = vertexModule;
-	vertShaderStageCreateInfo.pName = "main";
-
-	VkPipelineShaderStageCreateInfo fragShaderStagCreateInfo = {};
-	fragShaderStagCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	fragShaderStagCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	fragShaderStagCreateInfo.module = fragmentModule;
-	fragShaderStagCreateInfo.pName = "main";
-
-	VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageCreateInfo, fragShaderStagCreateInfo};
-
-	// create dynamic state:
-	//---------------
-	const uint32 dynamicStateCount = 2;
-	const VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-
-	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
-	dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicStateCreateInfo.dynamicStateCount = dynamicStateCount;
-	dynamicStateCreateInfo.pDynamicStates = dynamicStates;
-
-	// create vertex input info:
-	//---------------
-	VkVertexInputBindingDescription vertexBindingDescription = {};
-	vertexBindingDescription.binding = 0;
-	vertexBindingDescription.stride = sizeof(Vertex);
-	vertexBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	const uint32 vertexAttributeCount = 2;
-	VkVertexInputAttributeDescription vertexAttributeDescriptions[3] = {};
-
-	// pos:
-	vertexAttributeDescriptions[0].binding = 0;
-	vertexAttributeDescriptions[0].location = 0;
-	vertexAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	vertexAttributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-	// tex coord:
-	vertexAttributeDescriptions[1].binding = 0;
-	vertexAttributeDescriptions[1].location = 1;
-	vertexAttributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	vertexAttributeDescriptions[1].offset = offsetof(Vertex, texCoord);
-
-	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
-	vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
-	vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertexBindingDescription;
-	vertexInputStateCreateInfo.vertexAttributeDescriptionCount = vertexAttributeCount;
-	vertexInputStateCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions;
-
-	// create input assembly state:
-	//---------------
-	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
-	inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
-
-	// create viewport state (dynmaic so only need to specify counts):
-	//---------------
-	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
-	viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewportStateCreateInfo.viewportCount = 1;
-	viewportStateCreateInfo.scissorCount = 1;
-
-	// create rasterization state:
-	//---------------
-	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = {};
-	rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
-	rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-	rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizationStateCreateInfo.lineWidth = 1.0f;
-	rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE; // TODO: turn this back on
-	rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-	rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
-	rasterizationStateCreateInfo.depthBiasConstantFactor = 0.0f;
-	rasterizationStateCreateInfo.depthBiasClamp = 0.0f;
-	rasterizationStateCreateInfo.depthBiasSlopeFactor = 0.0f;
-
-	// create multisample state:
-	//---------------
-	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
-	multisampleStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampleStateCreateInfo.sampleShadingEnable = VK_FALSE;
-	multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-	multisampleStateCreateInfo.minSampleShading = 1.0f;
-	multisampleStateCreateInfo.pSampleMask = nullptr;
-	multisampleStateCreateInfo.alphaToCoverageEnable = VK_FALSE;
-	multisampleStateCreateInfo.alphaToOneEnable = VK_FALSE;
-
-	// create depth and stencil state:
-	//---------------
-	VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo = {};
-	depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencilCreateInfo.depthTestEnable = VK_TRUE;
-	depthStencilCreateInfo.depthWriteEnable = VK_TRUE;
-	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
-	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-
-	// create color blend state:
-	//---------------
-	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};
-	colorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachmentState.blendEnable = VK_FALSE;
-	colorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-
-	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {};
-	colorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
-	colorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;
-	colorBlendStateCreateInfo.attachmentCount = 1;
-	colorBlendStateCreateInfo.pAttachments = &colorBlendAttachmentState;
-	colorBlendStateCreateInfo.blendConstants[0] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[1] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[2] = 0.0f;
-	colorBlendStateCreateInfo.blendConstants[3] = 0.0f;
-
-	// create pipeline layout:
-	//---------------
-	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutCreateInfo.setLayoutCount = 1;
-	pipelineLayoutCreateInfo.pSetLayouts = &s->gparticleRenderPipelineDescriptorLayout;
-	pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-	pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
-
-	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gparticleRenderPipelineLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy particle pipeline layout");
-		return false;
-	}
-
-	// create pipeline:
-	//---------------
-	VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
-	pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineCreateInfo.stageCount = 2;
-	pipelineCreateInfo.pStages = shaderStages;
-	pipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
-	pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
-	pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
-	pipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
-	pipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
-	pipelineCreateInfo.pDepthStencilState = &depthStencilCreateInfo;
-	pipelineCreateInfo.pColorBlendState = &colorBlendStateCreateInfo;
-	pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
-	pipelineCreateInfo.layout = s->gparticleRenderPipelineLayout;
-	pipelineCreateInfo.renderPass = s->finalRenderPass;
-	pipelineCreateInfo.subpass = 0;
-	pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineCreateInfo.basePipelineIndex = -1;
-
-	if (vkCreateGraphicsPipelines(s->instance->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &s->gparticleRenderPipeline) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy particle pipeline");
-		return false;
-	}
-
-	// free shader modules:
-	//---------------
-	vkh_destroy_shader_module(s->instance, vertexModule);
-	vkh_destroy_shader_module(s->instance, fragmentModule);
+	vkh_destroy_shader_module(s->instance, vertModule);
+	vkh_destroy_shader_module(s->instance, fragModule);
 
 	return true;
 }
 
 static void _draw_destroy_gparticle_graphics_pipeline(DrawState* s)
 {
-	vkDestroyPipeline(s->instance->device, s->gparticleRenderPipeline, NULL);
-	vkDestroyPipelineLayout(s->instance->device, s->gparticleRenderPipelineLayout, NULL);
-	vkDestroyDescriptorSetLayout(s->instance->device, s->gparticleRenderPipelineDescriptorLayout, NULL);
+	vkh_pipeline_cleanup(s->particlePipeline, s->instance);
+	vkh_pipeline_destroy(s->particlePipeline);
 }
 
 static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
@@ -1217,133 +972,59 @@ static void _draw_destroy_gparticle_buffer(DrawState* s)
 
 static bool _draw_create_gparticle_graphics_descriptors(DrawState* s)
 {
-	VkDescriptorPoolSize poolSizes[2] = {};
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //camera
-	poolSizes[0].descriptorCount = FRAMES_IN_FLIGHT;
-	poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC; //positions
-	poolSizes[1].descriptorCount = FRAMES_IN_FLIGHT;
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 2;
-	poolInfo.pPoolSizes = poolSizes;
-	poolInfo.maxSets = FRAMES_IN_FLIGHT;
-
-	if (vkCreateDescriptorPool(s->instance->device, &poolInfo, nullptr, &s->gparticleRenderDescriptorPool) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy particle descriptor pool");
+	s->particleDescriptorSets = vkh_descriptor_sets_create(FRAMES_IN_FLIGHT);
+	if(!s->particleDescriptorSets)
 		return false;
-	}
 
-	VkDescriptorSetLayout layouts[FRAMES_IN_FLIGHT];
+	VkDescriptorBufferInfo cameraBufferInfos[FRAMES_IN_FLIGHT];
+	VkDescriptorBufferInfo particleBufferInfos[FRAMES_IN_FLIGHT];
 	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
-		layouts[i] = s->gparticleRenderPipelineDescriptorLayout;
-
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = s->gparticleRenderDescriptorPool;
-	allocInfo.descriptorSetCount = FRAMES_IN_FLIGHT;
-	allocInfo.pSetLayouts = layouts;
-
-	if (vkAllocateDescriptorSets(s->instance->device, &allocInfo, s->gparticleRenderDescriptorSets) != VK_SUCCESS)
 	{
-		ERROR_LOG("failed to allocate galaxy particle descriptor sets");
-		return false;
+		cameraBufferInfos[i].buffer = s->cameraBuffers[i];
+		cameraBufferInfos[i].offset = 0;
+		cameraBufferInfos[i].range = sizeof(CameraGPU);
+
+		particleBufferInfos[i].buffer = s->gparticleBuffer;
+		particleBufferInfos[i].offset = 0;
+		particleBufferInfos[i].range = VK_WHOLE_SIZE;
+
+		vkh_descriptor_sets_add_buffers(s->particleDescriptorSets, i, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+			0, 0, 1, &cameraBufferInfos[i]);
+
+		vkh_descriptor_sets_add_buffers(s->particleDescriptorSets, i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 
+			1, 0, 1, &particleBufferInfos[i]);
 	}
 
-	for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
-	{
-		VkDescriptorBufferInfo cameraBufferInfo = {};
-		cameraBufferInfo.buffer = s->cameraBuffers[i];
-		cameraBufferInfo.offset = 0;
-		cameraBufferInfo.range = sizeof(CameraGPU);
-
-		VkDescriptorBufferInfo perInstanceBufferInfo = {};
-		perInstanceBufferInfo.buffer = s->gparticleBuffer;
-		perInstanceBufferInfo.offset = 0;
-		perInstanceBufferInfo.range = VK_WHOLE_SIZE;
-
-		VkWriteDescriptorSet descriptorWrites[2] = {};
-
-		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = s->gparticleRenderDescriptorSets[i];
-		descriptorWrites[0].dstBinding = 0;
-		descriptorWrites[0].dstArrayElement = 0;
-		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrites[0].descriptorCount = 1;
-		descriptorWrites[0].pBufferInfo = &cameraBufferInfo;
-
-		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = s->gparticleRenderDescriptorSets[i];
-		descriptorWrites[1].dstBinding = 1;
-		descriptorWrites[1].dstArrayElement = 0;
-		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-		descriptorWrites[1].descriptorCount = 1;
-		descriptorWrites[1].pBufferInfo = &perInstanceBufferInfo;
-
-		vkUpdateDescriptorSets(s->instance->device, 2, descriptorWrites, 0, nullptr);
-	}
-
-	return true;
+	return vkh_desctiptor_sets_generate(s->particleDescriptorSets, s->instance, s->particlePipeline->descriptorLayout);
 }
 
 static void _draw_destroy_gparticle_graphics_descriptors(DrawState* s)
 {
-	vkDestroyDescriptorPool(s->instance->device, s->gparticleRenderDescriptorPool, NULL);
+	vkh_descriptor_sets_cleanup(s->particleDescriptorSets, s->instance);
+	vkh_descriptor_sets_destroy(s->particleDescriptorSets);
 }
 
 static bool _draw_create_gparticle_compute_descriptors(DrawState* s)
 {
-	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-	poolSize.descriptorCount = 1;
-
-	VkDescriptorPoolCreateInfo poolInfo = {};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
-	poolInfo.maxSets = 1;
-
-	if (vkCreateDescriptorPool(s->instance->device, &poolInfo, nullptr, &s->gparticleComputeDescriptorPool) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy particle compute descriptor pool");
+	s->particleComputeDescriptorSets = vkh_descriptor_sets_create(1);
+	if(!s->particleComputeDescriptorSets)
 		return false;
-	}
 
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = s->gparticleComputeDescriptorPool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &s->gparticleComputePipelineDescriptorLayout;
+	VkDescriptorBufferInfo particleBufferInfo = {};
+	particleBufferInfo.buffer = s->gparticleBuffer;
+	particleBufferInfo.offset = 0;
+	particleBufferInfo.range = VK_WHOLE_SIZE;
 
-	if (vkAllocateDescriptorSets(s->instance->device, &allocInfo, &s->gparticleComputeDescriptorSet) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to allocate galaxy particle compute descriptor sets");
-		return false;
-	}
-
-	VkDescriptorBufferInfo bufferInfo = {};
-	bufferInfo.buffer = s->gparticleBuffer;
-	bufferInfo.offset = 0;
-	bufferInfo.range = VK_WHOLE_SIZE;
-
-	VkWriteDescriptorSet descriptorWrite = {};
-	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrite.dstSet = s->gparticleComputeDescriptorSet;
-	descriptorWrite.dstBinding = 0;
-	descriptorWrite.dstArrayElement = 0;
-	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-	descriptorWrite.descriptorCount = 1;
-	descriptorWrite.pBufferInfo = &bufferInfo;
-
-	vkUpdateDescriptorSets(s->instance->device, 1, &descriptorWrite, 0, nullptr);
-
-	return true;
+	vkh_descriptor_sets_add_buffers(s->particleComputeDescriptorSets, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+		0, 0, 1, &particleBufferInfo);
+	
+	return vkh_desctiptor_sets_generate(s->particleComputeDescriptorSets, s->instance, s->gparticleComputePipelineDescriptorLayout);
 }
 
 static void _draw_destroy_gparticle_compute_descriptors(DrawState* s)
 {
-	vkDestroyDescriptorPool(s->instance->device, s->gparticleComputeDescriptorPool, NULL);
+	vkh_descriptor_sets_cleanup(s->particleComputeDescriptorSets, s->instance);
+	vkh_descriptor_sets_destroy(s->particleComputeDescriptorSets);
 }
 
 //----------------------------------------------------------------------------//
@@ -1408,7 +1089,7 @@ static void _draw_end_command_buffer(VkCommandBuffer commandBuffer)
 
 static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline->pipeline);
 
 	//bind buffers:
 	//---------------
@@ -1417,7 +1098,7 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 	vkCmdBindIndexBuffer(commandBuffer, s->quadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipelineLayout, 0, 1, &s->gridDescriptorSets[frameIndex], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline->layout, 0, 1, &s->gridDescriptorSets->sets[frameIndex], 0, nullptr);
 
 	int32 numCells = 16;
 
@@ -1438,7 +1119,7 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 	qm::mat4 model = qm::translate(pos) * qm::scale(qm::vec3(size, size, size));
 
 	GridParamsVertGPU vertParams = {model};
-	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GridParamsVertGPU), &vertParams);
+	vkCmdPushConstants(commandBuffer, s->gridPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GridParamsVertGPU), &vertParams);
 
 	//send fragment stage params:
 	//---------------
@@ -1448,7 +1129,7 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 	qm::vec2 offset = qm::vec2(offset3.x, offset3.z);
 
 	GridParamsFragGPU fragParams = {offset, numCells, thickness, scroll};
-	vkCmdPushConstants(commandBuffer, s->gridPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
+	vkCmdPushConstants(commandBuffer, s->gridPipeline->layout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(GridParamsVertGPU), sizeof(GridParamsFragGPU), &fragParams);
 
 	//draw:
 	//---------------
@@ -1477,7 +1158,7 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipeline);
 
 	uint32 dynamicOffset = 0;
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipelineLayout, 0, 1, &s->gparticleComputeDescriptorSet, 1, &dynamicOffset);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipelineLayout, 0, 1, &s->particleComputeDescriptorSets->sets[0], 1, &dynamicOffset);
 
 	ParticleComputeParamsGPU computeParams = { (f32)glfwGetTime() };
 	vkCmdPushConstants(commandBuffer, s->gparticleComputePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
@@ -1487,7 +1168,7 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 
 static void _draw_record_gparticle_graphics_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gparticleRenderPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->pipeline);
 
 	//bind buffers:
 	//---------------
@@ -1497,7 +1178,7 @@ static void _draw_record_gparticle_graphics_command_buffer(DrawState* s, DrawPar
 	vkCmdBindIndexBuffer(commandBuffer, s->quadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 	uint32 dynamicOffset = 0;
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gparticleRenderPipelineLayout, 0, 1, &s->gparticleRenderDescriptorSets[frameIndex], 1, &dynamicOffset);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->layout, 0, 1, &s->particleDescriptorSets->sets[frameIndex], 1, &dynamicOffset);
 
 	//draw:
 	//---------------

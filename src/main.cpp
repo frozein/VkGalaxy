@@ -1,3 +1,6 @@
+#define QD_IMPLEMENTATION
+#include "libs/vkh/quickdata.h"
+
 #include <iostream>
 #include "game.hpp"
 
