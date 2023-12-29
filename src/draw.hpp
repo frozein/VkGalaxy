@@ -43,7 +43,7 @@ struct DrawState
 	VkBuffer quadIndexBuffer;
 	VkDeviceMemory quadIndexBufferMemory;
 
-	//grid pipeline object
+	//grid pipeline objects:
 	VKHgraphicsPipeline* gridPipeline;
 	VKHdescriptorSets* gridDescriptorSets;
 
@@ -53,9 +53,7 @@ struct DrawState
 	VKHgraphicsPipeline* particlePipeline;
 	VKHdescriptorSets* particleDescriptorSets;
 
-	VkDescriptorSetLayout gparticleComputePipelineDescriptorLayout;
-	VkPipelineLayout gparticleComputePipelineLayout;
-	VkPipeline gparticleComputePipeline;
+	VKHcomputePipeline* particleComputePipeline;
 	VKHdescriptorSets* particleComputeDescriptorSets;
 
 	VkDeviceSize gparticleBufferSize;

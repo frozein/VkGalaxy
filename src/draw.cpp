@@ -760,15 +760,15 @@ static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 	cameraLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	cameraLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBinding perInstanceLayoutBinding = {};
-	perInstanceLayoutBinding.binding = 1;
-	perInstanceLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-	perInstanceLayoutBinding.descriptorCount = 1;
-	perInstanceLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	perInstanceLayoutBinding.pImmutableSamplers = nullptr;
+	VkDescriptorSetLayoutBinding particleLayoutBinding = {};
+	particleLayoutBinding.binding = 1;
+	particleLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	particleLayoutBinding.descriptorCount = 1;
+	particleLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	particleLayoutBinding.pImmutableSamplers = nullptr;
 
 	vkh_pipeline_add_desc_set_binding(s->particlePipeline, cameraLayoutBinding);
-	vkh_pipeline_add_desc_set_binding(s->particlePipeline, perInstanceLayoutBinding);
+	vkh_pipeline_add_desc_set_binding(s->particlePipeline, particleLayoutBinding);
 
 	//add dynamic states:
 	//---------------
@@ -865,7 +865,21 @@ static void _draw_destroy_gparticle_graphics_pipeline(DrawState* s)
 
 static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 {
-	// create descriptor set layout:
+	//create pipeline object:
+	//---------------
+	s->particleComputePipeline = vkh_compute_pipeline_create();
+	if(!s->particleComputePipeline)
+		return false;
+
+	//set shaders:
+	//---------------
+	uint64 computeCodeSize;
+	uint32 *computeCode = vkh_load_spirv("assets/spirv/galaxy_particle.comp.spv", &computeCodeSize);
+	VkShaderModule computeModule = vkh_create_shader_module(s->instance, computeCodeSize, computeCode);
+
+	vkh_compute_pipeline_set_shader(s->particleComputePipeline, computeModule);
+
+	//add descriptor set layout bindings:
 	//---------------
 	VkDescriptorSetLayoutBinding particleLayoutBinding = {};
 	particleLayoutBinding.binding = 0;
@@ -874,73 +888,25 @@ static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 	particleLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 	particleLayoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &particleLayoutBinding;
+	vkh_compute_pipeline_add_desc_set_binding(s->particleComputePipeline, particleLayoutBinding);
 
-	if (vkCreateDescriptorSetLayout(s->instance->device, &layoutInfo, nullptr, &s->gparticleComputePipelineDescriptorLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create descriptor set layout for galaxy particle compute pipeline");
-		return false;
-	}
-
-	// compile:
-	//---------------
-	uint64 computeCodeSize;
-	uint32 *computeCode = vkh_load_spirv("assets/spirv/galaxy_particle.comp.spv", &computeCodeSize);
-
-	// create shader modules:
-	//---------------
-	VkShaderModule computeModule = vkh_create_shader_module(s->instance, computeCodeSize, computeCode);
-
-	vkh_free_spirv(computeCode);
-
-	// create shader stages:
-	//---------------
-	VkPipelineShaderStageCreateInfo shaderStageCreateInfo = {};
-	shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	shaderStageCreateInfo.module = computeModule;
-	shaderStageCreateInfo.pName = "main";
-
-	// create push constants:
+	//add push constsants:
 	//---------------
 	VkPushConstantRange pushConstants = {};
 	pushConstants.offset = 0;
 	pushConstants.size = sizeof(ParticleComputeParamsGPU);
 	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-	// create pipeline layout:
-	//---------------
-	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutCreateInfo.setLayoutCount = 1;
-	pipelineLayoutCreateInfo.pSetLayouts = &s->gparticleComputePipelineDescriptorLayout;
-	pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-	pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstants;
+	vkh_compute_pipeline_add_push_constant(s->particleComputePipeline, pushConstants);
 
-	if (vkCreatePipelineLayout(s->instance->device, &pipelineLayoutCreateInfo, nullptr, &s->gparticleComputePipelineLayout) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy particle compute pipeline layout");
+	//generate pipeline:
+	//---------------
+	if(!vkh_compute_pipeline_generate(s->particleComputePipeline, s->instance))
 		return false;
-	}
 
-	// create pipeline:
+	//cleanup:
 	//---------------
-	VkComputePipelineCreateInfo pipelineCreateInfo = {};
-	pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	pipelineCreateInfo.layout = s->gparticleComputePipelineLayout;
-	pipelineCreateInfo.stage = shaderStageCreateInfo;
-
-	if (vkCreateComputePipelines(s->instance->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &s->gparticleComputePipeline) != VK_SUCCESS)
-	{
-		ERROR_LOG("failed to create galaxy compute particle pipeline");
-		return false;
-	}
-
-	// free shader modules:
-	//---------------
+	vkh_free_spirv(computeCode);
 	vkh_destroy_shader_module(s->instance, computeModule);
 
 	return true;
@@ -948,9 +914,8 @@ static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 
 static void _draw_destroy_gparticle_compute_pipeline(DrawState* s)
 {
-	vkDestroyPipeline(s->instance->device, s->gparticleComputePipeline, NULL);
-	vkDestroyPipelineLayout(s->instance->device, s->gparticleComputePipelineLayout, NULL);
-	vkDestroyDescriptorSetLayout(s->instance->device, s->gparticleComputePipelineDescriptorLayout, NULL);
+	vkh_compute_pipeline_cleanup(s->particleComputePipeline, s->instance);
+	vkh_compute_pipeline_destroy(s->particleComputePipeline);
 }
 
 static bool _draw_create_gparticle_buffer(DrawState* s)
@@ -1018,7 +983,7 @@ static bool _draw_create_gparticle_compute_descriptors(DrawState* s)
 	vkh_descriptor_sets_add_buffers(s->particleComputeDescriptorSets, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
 		0, 0, 1, &particleBufferInfo);
 	
-	return vkh_desctiptor_sets_generate(s->particleComputeDescriptorSets, s->instance, s->gparticleComputePipelineDescriptorLayout);
+	return vkh_desctiptor_sets_generate(s->particleComputeDescriptorSets, s->instance, s->particleComputePipeline->descriptorLayout);
 }
 
 static void _draw_destroy_gparticle_compute_descriptors(DrawState* s)
@@ -1155,13 +1120,13 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 
 	//dispatch:
 	//---------------
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->particleComputePipeline->pipeline);
 
 	uint32 dynamicOffset = 0;
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->gparticleComputePipelineLayout, 0, 1, &s->particleComputeDescriptorSets->sets[0], 1, &dynamicOffset);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->particleComputePipeline->layout, 0, 1, &s->particleComputeDescriptorSets->sets[0], 1, &dynamicOffset);
 
 	ParticleComputeParamsGPU computeParams = { (f32)glfwGetTime() };
-	vkCmdPushConstants(commandBuffer, s->gparticleComputePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
+	vkCmdPushConstants(commandBuffer, s->particleComputePipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
 
 	vkCmdDispatch(commandBuffer, 1, 1, 1);
 }

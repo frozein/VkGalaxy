@@ -396,7 +396,7 @@ VKHgraphicsPipeline* vkh_pipeline_create()
 	pipeline->descSetBindings       = qd_dynarray_create(sizeof(VkDescriptorSetLayoutBinding), NULL);
 	pipeline->dynamicStates         = qd_dynarray_create(sizeof(VkDynamicState), NULL);
 	pipeline->vertInputBindings     = qd_dynarray_create(sizeof(VkVertexInputBindingDescription), NULL);
-	pipeline->vertInputAttribs    = qd_dynarray_create(sizeof(VkVertexInputAttributeDescription), NULL);
+	pipeline->vertInputAttribs      = qd_dynarray_create(sizeof(VkVertexInputAttributeDescription), NULL);
 	pipeline->viewports             = qd_dynarray_create(sizeof(VkViewport), NULL);
 	pipeline->scissors              = qd_dynarray_create(sizeof(VkRect2D), NULL);
 	pipeline->colorBlendAttachments = qd_dynarray_create(sizeof(VkPipelineColorBlendAttachmentState), NULL);
@@ -518,6 +518,8 @@ vkh_bool_t vkh_pipeline_generate(VKHgraphicsPipeline* pipeline, VKHinstance* ins
 	if(vkCreatePipelineLayout(inst->device, &layoutInfo, NULL, &pipeline->layout) != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to create pipeline layout");
+
+		vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
 		return VKH_FALSE;
 	}
 
@@ -603,6 +605,9 @@ vkh_bool_t vkh_pipeline_generate(VKHgraphicsPipeline* pipeline, VKHinstance* ins
 	if(vkCreateGraphicsPipelines(inst->device, VK_NULL_HANDLE,  1, &pipelineInfo, NULL, &pipeline->pipeline) != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to create graphics pipeline");
+
+		vkDestroyPipelineLayout(inst->device, pipeline->layout, NULL);
+		vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
 		return VKH_FALSE;
 	}
 
@@ -739,6 +744,144 @@ void vkh_pipeline_set_color_blend_state(VKHgraphicsPipeline* pipeline, VkBool32 
 
 //----------------------------------------------------------------------------//
 
+VKHcomputePipeline* vkh_compute_pipeline_create()
+{
+	VKHcomputePipeline* pipeline = (VKHcomputePipeline*)malloc(sizeof(VKHcomputePipeline));
+	if(!pipeline)
+		return NULL;
+
+	pipeline->descSetBindings = qd_dynarray_create(sizeof(VkDescriptorSetLayoutBinding), NULL);
+	pipeline->pushConstants   = qd_dynarray_create(sizeof(VkPushConstantRange), NULL);
+
+	pipeline->shader = VK_NULL_HANDLE;
+
+	pipeline->generated = VKH_FALSE;
+	pipeline->descriptorLayout = VK_NULL_HANDLE;
+	pipeline->layout           = VK_NULL_HANDLE;
+	pipeline->pipeline         = VK_NULL_HANDLE;
+
+	return pipeline;
+}
+
+void vkh_compute_pipeline_destroy(VKHcomputePipeline* pipeline)
+{
+	if(pipeline->generated)
+	{
+		ERROR_LOG("you must call vkh_compute_pipeline_cleanup() before calling vkh_compute_pipeline_destroy()");
+		return;
+	}
+
+	qd_dynarray_free(pipeline->descSetBindings);
+	qd_dynarray_free(pipeline->pushConstants);
+
+	free(pipeline);
+}
+
+vkh_bool_t vkh_compute_pipeline_generate(VKHcomputePipeline* pipeline, VKHinstance* inst)
+{
+	if(pipeline->generated)
+	{
+		ERROR_LOG("pipeline has already been generated, call vkh_compute_pipeline_cleanup() before generating again");
+		return VKH_FALSE;
+	}
+
+	if(pipeline->shader == VK_NULL_HANDLE)
+	{
+		ERROR_LOG("pipeline has no shader specified, cannot create a compute pipeline without a shader");
+		return VKH_FALSE;
+	}
+
+	//create descriptor set layout:
+	//---------------
+	VkDescriptorSetLayoutCreateInfo descSetLayoutInfo = {0};
+	descSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descSetLayoutInfo.bindingCount = (uint32_t)pipeline->descSetBindings->len;
+	descSetLayoutInfo.pBindings = pipeline->descSetBindings->arr;
+
+	if(vkCreateDescriptorSetLayout(inst->device, &descSetLayoutInfo, NULL, &pipeline->descriptorLayout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create compute pipeline descriptor set layout");
+		return VKH_FALSE;
+	}
+
+	//create pipeline layout:
+	//---------------
+	VkPipelineLayoutCreateInfo layoutInfo = {0};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layoutInfo.setLayoutCount = 1; //TODO: support more than 1 descriptor layout
+	layoutInfo.pSetLayouts = &pipeline->descriptorLayout;
+	layoutInfo.pushConstantRangeCount = (uint32_t)pipeline->pushConstants->len;
+	layoutInfo.pPushConstantRanges = pipeline->pushConstants->arr;
+
+	if(vkCreatePipelineLayout(inst->device, &layoutInfo, NULL, &pipeline->layout) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create compute pipeline layout");
+
+		vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
+		return VKH_FALSE;
+	}
+
+	//create intermediate create infos:
+	//---------------
+	VkPipelineShaderStageCreateInfo shaderStage = {0};
+	shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	shaderStage.module = pipeline->shader;
+	shaderStage.pName = "main";
+
+	//create pipeline:
+	//---------------
+	VkComputePipelineCreateInfo pipelineInfo = {0};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipelineInfo.stage = shaderStage;
+	pipelineInfo.layout = pipeline->layout;
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = -1;
+
+	if(vkCreateComputePipelines(inst->device, VK_NULL_HANDLE,  1, &pipelineInfo, NULL, &pipeline->pipeline) != VK_SUCCESS)
+	{
+		ERROR_LOG("failed to create compute pipeline");
+
+		vkDestroyPipelineLayout(inst->device, pipeline->layout, NULL);
+		vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
+		return VKH_FALSE;
+	}
+
+	//return:
+	//---------------
+	pipeline->generated = VKH_TRUE;
+	return VKH_TRUE;
+}
+
+void vkh_compute_pipeline_cleanup(VKHcomputePipeline* pipeline, VKHinstance* inst)
+{
+	if(!pipeline->generated)
+		return;
+
+	vkDestroyPipeline           (inst->device, pipeline->pipeline, NULL);
+	vkDestroyPipelineLayout     (inst->device, pipeline->layout, NULL);
+	vkDestroyDescriptorSetLayout(inst->device, pipeline->descriptorLayout, NULL);
+
+	pipeline->generated = VKH_FALSE;
+}
+
+void vkh_compute_pipeline_add_desc_set_binding(VKHcomputePipeline* pipeline, VkDescriptorSetLayoutBinding binding)
+{
+	qd_dynarray_push(pipeline->descSetBindings, &binding);
+}
+
+void vkh_compute_pipeline_add_push_constant(VKHcomputePipeline* pipeline, VkPushConstantRange pushConstant)
+{
+	qd_dynarray_push(pipeline->pushConstants, &pushConstant);
+}
+
+void vkh_compute_pipeline_set_shader(VKHcomputePipeline* pipeline, VkShaderModule shader)
+{
+	pipeline->shader = shader;
+}
+
+//----------------------------------------------------------------------------//
+
 VKHdescriptorSets* vkh_descriptor_sets_create(uint32_t count)
 {
 	VKHdescriptorSets* descriptorSets = (VKHdescriptorSets*)malloc(sizeof(VKHdescriptorSets));
@@ -864,6 +1007,7 @@ vkh_bool_t vkh_desctiptor_sets_generate(VKHdescriptorSets* descriptorSets, VKHin
 	free(layouts);
 	free(writes);
 
+	descriptorSets->generated = VKH_TRUE;
 	return VKH_TRUE;
 }
 
@@ -873,6 +1017,7 @@ void vkh_descriptor_sets_cleanup(VKHdescriptorSets* descriptorSets, VKHinstance*
 		return;
 
 	vkDestroyDescriptorPool(inst->device, descriptorSets->pool, NULL);
+	descriptorSets->generated = VKH_FALSE;
 }
 
 void vkh_descriptor_sets_add_buffers(VKHdescriptorSets* descriptorSets, uint32_t index, VkDescriptorType type, uint32_t binding, uint32_t arrayElem, 

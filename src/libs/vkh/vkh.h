@@ -72,7 +72,7 @@ typedef struct VKHgraphicsPipeline
 	VkPipelineDepthStencilStateCreateInfo depthStencilState;
 	VkPipelineColorBlendStateCreateInfo colorBlendState;
 
-	//final:
+	//generated:
 	//---------------
 	vkh_bool_t generated;
 
@@ -81,6 +81,25 @@ typedef struct VKHgraphicsPipeline
 	VkPipeline pipeline;
 
 } VKHgraphicsPipeline;
+
+typedef struct VKHcomputePipeline
+{
+	//intermediates:
+	//---------------
+	QDdynArray* descSetBindings; //type - VkDescriptorSetLayoutBinding
+	QDdynArray* pushConstants;   //type - VkPushConstantRange
+
+	VkShaderModule shader;
+
+	//generated:
+	//---------------
+	vkh_bool_t generated;
+
+	VkDescriptorSetLayout descriptorLayout;
+	VkPipelineLayout layout;
+	VkPipeline pipeline;
+
+} VKHcomputePipeline;
 
 typedef struct VKHdescriptorInfo
 {
@@ -97,6 +116,7 @@ typedef struct VKHdescriptorInfo
 	VkDescriptorType type;
 	uint32_t binding;
 	uint32_t arrayElem;
+
 } VKHdescriptorInfo;
 
 typedef struct VKHdescriptorSets
@@ -106,7 +126,7 @@ typedef struct VKHdescriptorSets
 	uint32_t count;
 	QDdynArray* descriptors; //type - VKHdescriptorInfo
 
-	//final:
+	//generated:
 	//---------------
 	vkh_bool_t generated;
 
@@ -153,11 +173,11 @@ void           vkh_destroy_shader_module(VKHinstance* instance, VkShaderModule m
 
 //NOTE: only supports 1 desciptor layout, FIXME
 //NOTE: only supports vert/frag shaders, FIXME
-VKHgraphicsPipeline* vkh_pipeline_create  ();
-void                 vkh_pipeline_destroy (VKHgraphicsPipeline* pipeline);
+VKHgraphicsPipeline* vkh_pipeline_create    ();
+void                 vkh_pipeline_destroy   (VKHgraphicsPipeline* pipeline);
 
-vkh_bool_t           vkh_pipeline_generate(VKHgraphicsPipeline* pipeline, VKHinstance* instance, VkRenderPass renderPass, uint32_t subpass);
-void                 vkh_pipeline_cleanup (VKHgraphicsPipeline* pipeline, VKHinstance* instance);
+vkh_bool_t           vkh_pipeline_generate  (VKHgraphicsPipeline* pipeline, VKHinstance* instance, VkRenderPass renderPass, uint32_t subpass);
+void                 vkh_pipeline_cleanup   (VKHgraphicsPipeline* pipeline, VKHinstance* instance);
 
 void vkh_pipeline_add_desc_set_binding      (VKHgraphicsPipeline* pipeline, VkDescriptorSetLayoutBinding binding);
 void vkh_pipeline_add_dynamic_state         (VKHgraphicsPipeline* pipeline, VkDynamicState state);
@@ -181,6 +201,19 @@ void vkh_pipeline_set_depth_stencil_state   (VKHgraphicsPipeline* pipeline, VkBo
                                              VkBool32 depthBoundsTest, VkBool32 stencilTest, VkStencilOpState front, VkStencilOpState back, float minDepthBound, float maxDepthBound);
 void vkh_pipeline_set_color_blend_state     (VKHgraphicsPipeline* pipeline, VkBool32 logicOpEnable, VkLogicOp logicOp, float rBlendConstant,
                                              float gBlendConstant, float bBlendConstant, float aBlendConstant);
+
+//----------------------------------------------------------------------------//
+
+VKHcomputePipeline* vkh_compute_pipeline_create              ();
+void                vkh_compute_pipeline_destroy             (VKHcomputePipeline* pipeline);
+
+vkh_bool_t          vkh_compute_pipeline_generate            (VKHcomputePipeline* pipeline, VKHinstance* instance);
+void                vkh_compute_pipeline_cleanup             (VKHcomputePipeline* pipeline, VKHinstance* instance);
+
+void                vkh_compute_pipeline_add_desc_set_binding(VKHcomputePipeline* pipeline, VkDescriptorSetLayoutBinding binding);
+void                vkh_compute_pipeline_add_push_constant   (VKHcomputePipeline* pipeline, VkPushConstantRange pushConstant);
+
+void                vkh_compute_pipeline_set_shader          (VKHcomputePipeline* pipeline, VkShaderModule shader);
 
 //----------------------------------------------------------------------------//
 
