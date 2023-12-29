@@ -47,18 +47,16 @@ struct DrawState
 	VKHgraphicsPipeline* gridPipeline;
 	VKHdescriptorSets* gridDescriptorSets;
 
-	//galaxy particle pipeline objects:
-	uint64 numGparticles;
-
+	//particle pipeline objects:
 	VKHgraphicsPipeline* particlePipeline;
 	VKHdescriptorSets* particleDescriptorSets;
 
 	VKHcomputePipeline* particleComputePipeline;
 	VKHdescriptorSets* particleComputeDescriptorSets;
 
-	VkDeviceSize gparticleBufferSize;
-	VkBuffer gparticleBuffer;
-	VkDeviceMemory gparticleBufferMemory;
+	VkDeviceSize particleBufferSize;
+	VkBuffer particleBuffer;
+	VkDeviceMemory particleBufferMemory;
 };
 
 //----------------------------------------------------------------------------//

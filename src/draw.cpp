@@ -5,6 +5,11 @@
 
 //----------------------------------------------------------------------------//
 
+#define DRAW_NUM_PARTICLES 1024
+#define DRAW_PARTICLE_WORK_GROUP_SIZE 256
+
+//----------------------------------------------------------------------------//
+
 // mirrors camera buffer on GPU
 struct CameraGPU
 {
@@ -69,31 +74,28 @@ static void _draw_destroy_grid_descriptors(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
-static bool _draw_create_gparticle_graphics_pipeline(DrawState* state);
-static void _draw_destroy_gparticle_graphics_pipeline(DrawState* state);
+static bool _draw_create_particle_pipeline(DrawState* state);
+static void _draw_destroy_particle_pipeline(DrawState* state);
 
-static bool _draw_create_gparticle_compute_pipeline(DrawState* state);
-static void _draw_destroy_gparticle_compute_pipeline(DrawState* state);
+static bool _draw_create_particle_compute_pipeline(DrawState* state);
+static void _draw_destroy_particle_compute_pipeline(DrawState* state);
 
-static bool _draw_create_gparticle_buffer(DrawState* state);
-static void _draw_destroy_gparticle_buffer(DrawState* state);
+static bool _draw_create_particle_buffer(DrawState* state);
+static void _draw_destroy_particle_buffer(DrawState* state);
 
-static bool _draw_create_gparticle_graphics_descriptors(DrawState* state);
-static void _draw_destroy_gparticle_graphics_descriptors(DrawState* state);
+static bool _draw_create_particle_descriptors(DrawState* state);
+static void _draw_destroy_particle_descriptors(DrawState* state);
 
-static bool _draw_create_gparticle_compute_descriptors(DrawState* state);
-static void _draw_destroy_gparticle_compute_descriptors(DrawState* state);
+static bool _draw_create_particle_compute_descriptors(DrawState* state);
+static void _draw_destroy_particle_compute_descriptors(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
-static void _draw_start_command_buffer(DrawState* s, VkCommandBuffer commandBuffer);
-static void _draw_end_command_buffer(VkCommandBuffer commandBuffer);
+static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
-static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
-
-static void _draw_record_render_pass_command_buffer(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
-static void _draw_record_gparticle_graphics_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
-static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_render_pass_start_commands(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static void _draw_record_grid_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
 //----------------------------------------------------------------------------//
 
@@ -114,62 +116,62 @@ bool draw_init(DrawState** state)
 	*state = (DrawState* )malloc(sizeof(DrawState));
 	DrawState* s = *state;
 
-	// create render state:
+	//create render state:
 	//---------------
-	if (!vkh_init(&s->instance, 1920, 1080, "VulkanCraft"))
+	if(!vkh_init(&s->instance, 1920, 1080, "VulkanCraft"))
 	{
 		ERROR_LOG("failed to initialize render instance");
 		return false;
 	}
 
-	// initialize objects for drawing:
+	//initialize objects for drawing:
 	//---------------
-	if (!_draw_create_depth_buffer(s))
+	if(!_draw_create_depth_buffer(s))
 		return false;
 
-	if (!_draw_create_final_render_pass(s))
+	if(!_draw_create_final_render_pass(s))
 		return false;
 
-	if (!_draw_create_framebuffers(s))
+	if(!_draw_create_framebuffers(s))
 		return false;
 
-	if (!_draw_create_command_buffers(s))
+	if(!_draw_create_command_buffers(s))
 		return false;
 
-	if (!_draw_create_sync_objects(s))
+	if(!_draw_create_sync_objects(s))
 		return false;
 
-	if (!_draw_create_camera_buffer(s))
+	if(!_draw_create_camera_buffer(s))
 		return false;
 
-	// initialize reusable vertex buffers:
+	//initialize reusable vertex buffers:
 	//---------------
-	if (!_draw_create_quad_vertex_buffer(s))
+	if(!_draw_create_quad_vertex_buffer(s))
 		return false;
 
-	// initialize grid drawing objects:
+	//initialize grid drawing objects:
 	//---------------
-	if (!_draw_create_grid_pipeline(s))
+	if(!_draw_create_grid_pipeline(s))
 		return false;
 
-	if (!_draw_create_grid_descriptors(s))
+	if(!_draw_create_grid_descriptors(s))
 		return false;
 
 	// initialize galaxy particle drawing objects:
 	//---------------
-	if (!_draw_create_gparticle_graphics_pipeline(s))
+	if(!_draw_create_particle_pipeline(s))
 		return false;
 
-	if(!_draw_create_gparticle_compute_pipeline(s))
+	if(!_draw_create_particle_compute_pipeline(s))
 		return false;
 
-	if(!_draw_create_gparticle_buffer(s))
+	if(!_draw_create_particle_buffer(s))
 		return false;
 
-	if (!_draw_create_gparticle_graphics_descriptors(s))
+	if(!_draw_create_particle_descriptors(s))
 		return false;
 
-	if(!_draw_create_gparticle_compute_descriptors(s))
+	if(!_draw_create_particle_compute_descriptors(s))
 		return false;
 
 	return true;
@@ -179,11 +181,11 @@ void draw_quit(DrawState* s)
 {
 	vkDeviceWaitIdle(s->instance->device);
 
-	_draw_destroy_gparticle_compute_descriptors(s);
-	_draw_destroy_gparticle_graphics_descriptors(s);
-	_draw_destroy_gparticle_buffer(s);
-	_draw_destroy_gparticle_compute_pipeline(s);
-	_draw_destroy_gparticle_graphics_pipeline(s);
+	_draw_destroy_particle_compute_descriptors(s);
+	_draw_destroy_particle_descriptors(s);
+	_draw_destroy_particle_buffer(s);
+	_draw_destroy_particle_compute_pipeline(s);
+	_draw_destroy_particle_pipeline(s);
 
 	_draw_destroy_grid_descriptors(s);
 	_draw_destroy_grid_pipeline(s);
@@ -208,19 +210,19 @@ void draw_render(DrawState* s, DrawParams* params)
 {
 	static uint32 frameIdx = 0;
 
-	// WAIT FOR IN-FLIGHT FENCES AND GET NEXT SWAPCHAIN IMAGE (essentially just making sure last frame is done):
+	//wait for fences and get next swapchain image: (essentially just making sure last frame is done):
 	//---------------
 	vkWaitForFences(s->instance->device, 1, &s->inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
 
 	uint32 imageIdx;
 	VkResult imageAquireResult = vkAcquireNextImageKHR(s->instance->device, s->instance->swapchain, UINT64_MAX,
 													   s->imageAvailableSemaphores[frameIdx], VK_NULL_HANDLE, &imageIdx);
-	if (imageAquireResult == VK_ERROR_OUT_OF_DATE_KHR || imageAquireResult == VK_SUBOPTIMAL_KHR)
+	if(imageAquireResult == VK_ERROR_OUT_OF_DATE_KHR || imageAquireResult == VK_SUBOPTIMAL_KHR)
 	{
 		_draw_window_resized(s);
 		return;
 	}
-	else if (imageAquireResult != VK_SUCCESS)
+	else if(imageAquireResult != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to acquire swapchain image");
 		return;
@@ -228,7 +230,7 @@ void draw_render(DrawState* s, DrawParams* params)
 
 	vkResetFences(s->instance->device, 1, &s->inFlightFences[frameIdx]);
 
-	// UPDATE CAMERA BUFFER:
+	//update camera buffer:
 	//---------------
 	int32 windowW, windowH;
 	glfwGetWindowSize(s->instance->window, &windowW, &windowH);
@@ -244,21 +246,32 @@ void draw_render(DrawState* s, DrawParams* params)
 	vkh_copy_with_staging_buf(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory,
 									  s->cameraBuffers[frameIdx], sizeof(CameraGPU), 0, &camBuffer);
 
-	// RECORD COMMAND BUFFER:
+	//start command buffer:
 	//---------------
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = 0;
+	beginInfo.pInheritanceInfo = nullptr;
+
 	vkResetCommandBuffer(s->commandBuffers[frameIdx], 0);
+	vkBeginCommandBuffer(s->commandBuffers[frameIdx], &beginInfo);
 
-	_draw_start_command_buffer(s, s->commandBuffers[frameIdx]);
+	//record commands:
+	//---------------
+	_draw_record_particle_compute_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
-	_draw_record_gparticle_compute_command_buffer(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_render_pass_start_commands(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_particle_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_grid_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
-	_draw_record_render_pass_command_buffer(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
-	_draw_record_gparticle_graphics_command_buffer(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
-	_draw_record_grid_command_buffer(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	//end command buffer:
+	//---------------
+	vkCmdEndRenderPass(s->commandBuffers[frameIdx]);
 
-	_draw_end_command_buffer(s->commandBuffers[frameIdx]);
+	if(vkEndCommandBuffer(s->commandBuffers[frameIdx]) != VK_SUCCESS)
+		ERROR_LOG("failed to end command buffer");
 
-	// SUBMIT COMMAND BUFFERS:
+	//submit command buffer:
 	//---------------
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -274,7 +287,7 @@ void draw_render(DrawState* s, DrawParams* params)
 
 	vkQueueSubmit(s->instance->graphicsQueue, 1, &submitInfo, s->inFlightFences[frameIdx]);
 
-	// PRESENT RESULT TO SCREEN:
+	//present to screen:
 	//---------------
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -286,9 +299,9 @@ void draw_render(DrawState* s, DrawParams* params)
 	presentInfo.pResults = nullptr;
 
 	VkResult presentResult = vkQueuePresentKHR(s->instance->presentQueue, &presentInfo);
-	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
+	if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
 		_draw_window_resized(s);
-	else if (presentResult != VK_SUCCESS)
+	else if(presentResult != VK_SUCCESS)
 		ERROR_LOG("failed to present swapchain image");
 
 	frameIdx = (frameIdx + 1) % FRAMES_IN_FLIGHT;
@@ -302,12 +315,12 @@ static bool _draw_create_depth_buffer(DrawState* s)
 	const VkFormat possibleDepthFormats[3] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
 
 	bool depthFormatFound = false;
-	for (int32 i = 0; i < possibleDepthFormatCount; i++)
+	for(int32 i = 0; i < possibleDepthFormatCount; i++)
 	{
 		VkFormatProperties properties;
 		vkGetPhysicalDeviceFormatProperties(s->instance->physicalDevice, possibleDepthFormats[i], &properties);
 
-		if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+		if(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
 		{
 			s->depthFormat = possibleDepthFormats[i];
 			depthFormatFound = true;
@@ -315,7 +328,7 @@ static bool _draw_create_depth_buffer(DrawState* s)
 		}
 	}
 
-	if (!depthFormatFound)
+	if(!depthFormatFound)
 	{
 		ERROR_LOG("failed to find a supported depth buffer format");
 		return false;
@@ -337,7 +350,7 @@ static void _draw_destroy_depth_buffer(DrawState* s)
 
 static bool _draw_create_final_render_pass(DrawState* s)
 {
-	// create attachments:
+	//create attachments:
 	//---------------
 	VkAttachmentDescription colorAttachment = {};
 	colorAttachment.format = s->instance->swapchainFormat;
@@ -359,7 +372,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-	// create attachment references:
+	//create attachment references:
 	//---------------
 	VkAttachmentReference colorAttachmentReference = {};
 	colorAttachmentReference.attachment = 0;
@@ -369,7 +382,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	depthAttachmentReference.attachment = 1;
 	depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-	// create subpass description:
+	//create subpass description:
 	//---------------
 	VkSubpassDescription subpass = {};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -377,7 +390,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	subpass.pColorAttachments = &colorAttachmentReference;
 	subpass.pDepthStencilAttachment = &depthAttachmentReference;
 
-	// create dependency:
+	//create dependency:
 	//---------------
 	VkSubpassDependency attachmentDependency = {};
 	attachmentDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -397,7 +410,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 
 	VkSubpassDependency dependencies[2] = {attachmentDependency, computeDependency};
 
-	// create render pass:
+	//create render pass:
 	//---------------
 	const uint32 attachmentCount = 2;
 	VkAttachmentDescription attachments[2] = {colorAttachment, depthAttachment};
@@ -411,7 +424,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	renderPassCreateInfo.dependencyCount = 2;
 	renderPassCreateInfo.pDependencies = dependencies;
 
-	if (vkCreateRenderPass(s->instance->device, &renderPassCreateInfo, nullptr, &s->finalRenderPass) != VK_SUCCESS)
+	if(vkCreateRenderPass(s->instance->device, &renderPassCreateInfo, nullptr, &s->finalRenderPass) != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to create final render pass");
 		return false;
@@ -430,7 +443,7 @@ static bool _draw_create_framebuffers(DrawState* s)
 	s->framebufferCount = s->instance->swapchainImageCount;
 	s->framebuffers = (VkFramebuffer*)malloc(s->framebufferCount * sizeof(VkFramebuffer));
 
-	for (uint32 i = 0; i < s->framebufferCount; i++)
+	for(uint32 i = 0; i < s->framebufferCount; i++)
 	{
 		VkImageView attachments[2] = {s->instance->swapchainImageViews[i], s->finalDepthView};
 
@@ -443,7 +456,7 @@ static bool _draw_create_framebuffers(DrawState* s)
 		createInfo.height = s->instance->swapchainExtent.height;
 		createInfo.layers = 1;
 
-		if (vkCreateFramebuffer(s->instance->device, &createInfo, nullptr, &s->framebuffers[i]) != VK_SUCCESS)
+		if(vkCreateFramebuffer(s->instance->device, &createInfo, nullptr, &s->framebuffers[i]) != VK_SUCCESS)
 		{
 			ERROR_LOG("failed to create framebuffer");
 			return false;
@@ -455,7 +468,7 @@ static bool _draw_create_framebuffers(DrawState* s)
 
 static void _draw_destroy_framebuffers(DrawState* s)
 {
-	for (uint32 i = 0; i < s->framebufferCount; i++)
+	for(uint32 i = 0; i < s->framebufferCount; i++)
 		vkDestroyFramebuffer(s->instance->device, s->framebuffers[i], NULL);
 
 	free(s->framebuffers);
@@ -468,7 +481,7 @@ static bool _draw_create_command_buffers(DrawState* s)
 	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 	poolInfo.queueFamilyIndex = s->instance->graphicsComputeFamilyIdx;
 
-	if (vkCreateCommandPool(s->instance->device, &poolInfo, nullptr, &s->commandPool) != VK_SUCCESS)
+	if(vkCreateCommandPool(s->instance->device, &poolInfo, nullptr, &s->commandPool) != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to create command pool");
 		return false;
@@ -480,7 +493,7 @@ static bool _draw_create_command_buffers(DrawState* s)
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = FRAMES_IN_FLIGHT;
 
-	if (vkAllocateCommandBuffers(s->instance->device, &allocInfo, s->commandBuffers) != VK_SUCCESS)
+	if(vkAllocateCommandBuffers(s->instance->device, &allocInfo, s->commandBuffers) != VK_SUCCESS)
 	{
 		ERROR_LOG("failed to allocate command buffers");
 		return false;
@@ -504,8 +517,8 @@ static bool _draw_create_sync_objects(DrawState* s)
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
-		if (vkCreateSemaphore(s->instance->device, &semaphoreInfo, NULL, &s->imageAvailableSemaphores[i]) != VK_SUCCESS ||
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+		if(vkCreateSemaphore(s->instance->device, &semaphoreInfo, NULL, &s->imageAvailableSemaphores[i]) != VK_SUCCESS ||
 			vkCreateSemaphore(s->instance->device, &semaphoreInfo, NULL, &s->renderFinishedSemaphores[i]) != VK_SUCCESS ||
 			vkCreateFence(s->instance->device, &fenceInfo, NULL, &s->inFlightFences[i]) != VK_SUCCESS)
 		{
@@ -518,7 +531,7 @@ static bool _draw_create_sync_objects(DrawState* s)
 
 static void _draw_destroy_sync_objects(DrawState* s)
 {
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		vkDestroySemaphore(s->instance->device, s->imageAvailableSemaphores[i], NULL);
 		vkDestroySemaphore(s->instance->device, s->renderFinishedSemaphores[i], NULL);
@@ -530,7 +543,7 @@ static bool _draw_create_camera_buffer(DrawState* s)
 {
 	VkDeviceSize bufferSize = sizeof(CameraGPU);
 
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		s->cameraBuffers[i] = vkh_create_buffer(s->instance, bufferSize,
 												   VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -547,7 +560,7 @@ static void _draw_destroy_camera_buffer(DrawState* s)
 {
 	vkh_destroy_buffer(s->instance, s->cameraStagingBuffer, s->cameraStagingBufferMemory);
 
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 		vkh_destroy_buffer(s->instance, s->cameraBuffers[i], s->cameraBuffersMemory[i]);
 }
 
@@ -710,7 +723,7 @@ static bool _draw_create_grid_descriptors(DrawState* s)
 		return false;
 
 	VkDescriptorBufferInfo cameraBufferInfos[FRAMES_IN_FLIGHT];
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		cameraBufferInfos[i].buffer = s->cameraBuffers[i];
 		cameraBufferInfos[i].offset = 0;
@@ -731,7 +744,7 @@ static void _draw_destroy_grid_descriptors(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
-static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
+static bool _draw_create_particle_pipeline(DrawState* s)
 {
 	//create pipeline object:
 	//---------------
@@ -857,13 +870,13 @@ static bool _draw_create_gparticle_graphics_pipeline(DrawState* s)
 	return true;
 }
 
-static void _draw_destroy_gparticle_graphics_pipeline(DrawState* s)
+static void _draw_destroy_particle_pipeline(DrawState* s)
 {
 	vkh_pipeline_cleanup(s->particlePipeline, s->instance);
 	vkh_pipeline_destroy(s->particlePipeline);
 }
 
-static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
+static bool _draw_create_particle_compute_pipeline(DrawState* s)
 {
 	//create pipeline object:
 	//---------------
@@ -912,30 +925,29 @@ static bool _draw_create_gparticle_compute_pipeline(DrawState* s)
 	return true;
 }
 
-static void _draw_destroy_gparticle_compute_pipeline(DrawState* s)
+static void _draw_destroy_particle_compute_pipeline(DrawState* s)
 {
 	vkh_compute_pipeline_cleanup(s->particleComputePipeline, s->instance);
 	vkh_compute_pipeline_destroy(s->particleComputePipeline);
 }
 
-static bool _draw_create_gparticle_buffer(DrawState* s)
+static bool _draw_create_particle_buffer(DrawState* s)
 {
-	s->numGparticles = 0;
-	s->gparticleBufferSize = 1024 * sizeof(GalaxyParticle); //default allocate 1024 elements, will resize if necessary
+	s->particleBufferSize = DRAW_NUM_PARTICLES * sizeof(GalaxyParticle);
 
-	s->gparticleBuffer = vkh_create_buffer(s->instance, s->gparticleBufferSize,
+	s->particleBuffer = vkh_create_buffer(s->instance, s->particleBufferSize,
 												VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-												VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->gparticleBufferMemory);
+												VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &s->particleBufferMemory);
 
 	return true;
 }
 
-static void _draw_destroy_gparticle_buffer(DrawState* s)
+static void _draw_destroy_particle_buffer(DrawState* s)
 {
-	vkh_destroy_buffer(s->instance, s->gparticleBuffer, s->gparticleBufferMemory);
+	vkh_destroy_buffer(s->instance, s->particleBuffer, s->particleBufferMemory);
 }
 
-static bool _draw_create_gparticle_graphics_descriptors(DrawState* s)
+static bool _draw_create_particle_descriptors(DrawState* s)
 {
 	s->particleDescriptorSets = vkh_descriptor_sets_create(FRAMES_IN_FLIGHT);
 	if(!s->particleDescriptorSets)
@@ -943,13 +955,13 @@ static bool _draw_create_gparticle_graphics_descriptors(DrawState* s)
 
 	VkDescriptorBufferInfo cameraBufferInfos[FRAMES_IN_FLIGHT];
 	VkDescriptorBufferInfo particleBufferInfos[FRAMES_IN_FLIGHT];
-	for (int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
+	for(int32 i = 0; i < FRAMES_IN_FLIGHT; i++)
 	{
 		cameraBufferInfos[i].buffer = s->cameraBuffers[i];
 		cameraBufferInfos[i].offset = 0;
 		cameraBufferInfos[i].range = sizeof(CameraGPU);
 
-		particleBufferInfos[i].buffer = s->gparticleBuffer;
+		particleBufferInfos[i].buffer = s->particleBuffer;
 		particleBufferInfos[i].offset = 0;
 		particleBufferInfos[i].range = VK_WHOLE_SIZE;
 
@@ -963,20 +975,20 @@ static bool _draw_create_gparticle_graphics_descriptors(DrawState* s)
 	return vkh_desctiptor_sets_generate(s->particleDescriptorSets, s->instance, s->particlePipeline->descriptorLayout);
 }
 
-static void _draw_destroy_gparticle_graphics_descriptors(DrawState* s)
+static void _draw_destroy_particle_descriptors(DrawState* s)
 {
 	vkh_descriptor_sets_cleanup(s->particleDescriptorSets, s->instance);
 	vkh_descriptor_sets_destroy(s->particleDescriptorSets);
 }
 
-static bool _draw_create_gparticle_compute_descriptors(DrawState* s)
+static bool _draw_create_particle_compute_descriptors(DrawState* s)
 {
 	s->particleComputeDescriptorSets = vkh_descriptor_sets_create(1);
 	if(!s->particleComputeDescriptorSets)
 		return false;
 
 	VkDescriptorBufferInfo particleBufferInfo = {};
-	particleBufferInfo.buffer = s->gparticleBuffer;
+	particleBufferInfo.buffer = s->particleBuffer;
 	particleBufferInfo.offset = 0;
 	particleBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -986,7 +998,7 @@ static bool _draw_create_gparticle_compute_descriptors(DrawState* s)
 	return vkh_desctiptor_sets_generate(s->particleComputeDescriptorSets, s->instance, s->particleComputePipeline->descriptorLayout);
 }
 
-static void _draw_destroy_gparticle_compute_descriptors(DrawState* s)
+static void _draw_destroy_particle_compute_descriptors(DrawState* s)
 {
 	vkh_descriptor_sets_cleanup(s->particleComputeDescriptorSets, s->instance);
 	vkh_descriptor_sets_destroy(s->particleComputeDescriptorSets);
@@ -994,19 +1006,7 @@ static void _draw_destroy_gparticle_compute_descriptors(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
-static void _draw_start_command_buffer(DrawState* s, VkCommandBuffer commandBuffer)
-{
-	//command buffer begin:
-	//---------------
-	VkCommandBufferBeginInfo beginInfo = {};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = 0;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
-}
-
-static void _draw_record_render_pass_command_buffer(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_render_pass_start_commands(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	//render pass begin:
 	//---------------
@@ -1044,15 +1044,7 @@ static void _draw_record_render_pass_command_buffer(DrawState* s, VkCommandBuffe
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
-static void _draw_end_command_buffer(VkCommandBuffer commandBuffer)
-{
-	vkCmdEndRenderPass(commandBuffer);
-
-	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-		ERROR_LOG("failed to end command buffer");
-}
-
-static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_grid_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gridPipeline->pipeline);
 
@@ -1101,7 +1093,7 @@ static void _draw_record_grid_command_buffer(DrawState* s, DrawParams* params, V
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 }
 
-static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	//write barrier: (ensures compute shader will not run while buffer is being read from)
 	//---------------
@@ -1111,7 +1103,7 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 	writeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 	writeBarrier.srcQueueFamilyIndex = s->instance->graphicsComputeFamilyIdx;
 	writeBarrier.dstQueueFamilyIndex = s->instance->graphicsComputeFamilyIdx;
-	writeBarrier.buffer = s->gparticleBuffer;
+	writeBarrier.buffer = s->particleBuffer;
 	writeBarrier.offset = 0;
 	writeBarrier.size = VK_WHOLE_SIZE;
 
@@ -1131,7 +1123,7 @@ static void _draw_record_gparticle_compute_command_buffer(DrawState* s, DrawPara
 	vkCmdDispatch(commandBuffer, 1, 1, 1);
 }
 
-static void _draw_record_gparticle_graphics_command_buffer(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->pipeline);
 
@@ -1156,7 +1148,7 @@ static void _draw_window_resized(DrawState* s)
 {
 	int32 w, h;
 	glfwGetFramebufferSize(s->instance->window, &w, &h);
-	if (w == 0 || h == 0)
+	if(w == 0 || h == 0)
 		return;
 
 	vkh_resize_swapchain(s->instance, w, h);
