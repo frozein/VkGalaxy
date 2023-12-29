@@ -428,7 +428,7 @@ static void _draw_destroy_final_render_pass(DrawState* s)
 static bool _draw_create_framebuffers(DrawState* s)
 {
 	s->framebufferCount = s->instance->swapchainImageCount;
-	s->framebuffers = (VkFramebuffer *)malloc(s->framebufferCount * sizeof(VkFramebuffer));
+	s->framebuffers = (VkFramebuffer*)malloc(s->framebufferCount * sizeof(VkFramebuffer));
 
 	for (uint32 i = 0; i < s->framebufferCount; i++)
 	{
