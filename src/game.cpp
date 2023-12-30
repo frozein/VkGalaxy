@@ -92,8 +92,7 @@ void game_main_loop(GameState* s)
 		drawParams.cam.target = s->cam.center;
 		drawParams.cam.dist = s->cam.dist;
 		drawParams.cam.fov = CAMERA_FOV;
-		drawParams.numParticles = 1;
-		draw_render(s->drawState, &drawParams);
+		draw_render(s->drawState, &drawParams, dt);
 	
 		glfwPollEvents();
 	}

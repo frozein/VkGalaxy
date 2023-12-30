@@ -87,9 +87,6 @@ struct DrawParams
 
 		float fov;
 	} cam;
-
-	uint32 numParticles;
-	qm::mat4* particleTransforms;
 };
 
 //----------------------------------------------------------------------------//
@@ -97,6 +94,6 @@ struct DrawParams
 bool draw_init(DrawState** state);
 void draw_quit(DrawState* state);
 
-void draw_render(DrawState* state, DrawParams* params);
+void draw_render(DrawState* state, DrawParams* params, f32 dt);
 
 #endif

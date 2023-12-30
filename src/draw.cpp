@@ -91,7 +91,11 @@ static void _draw_destroy_particle_compute_descriptors(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
-static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+static bool _draw_initialize_particles(DrawState* state);
+
+//----------------------------------------------------------------------------//
+
+static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, f32 dt, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
 static void _draw_record_render_pass_start_commands(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
@@ -174,6 +178,9 @@ bool draw_init(DrawState** state)
 	if(!_draw_create_particle_compute_descriptors(s))
 		return false;
 
+	if(!_draw_initialize_particles(s))
+		return false;
+
 	return true;
 }
 
@@ -206,7 +213,7 @@ void draw_quit(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
-void draw_render(DrawState* s, DrawParams* params)
+void draw_render(DrawState* s, DrawParams* params, f32 dt)
 {
 	static uint32 frameIdx = 0;
 
@@ -258,7 +265,7 @@ void draw_render(DrawState* s, DrawParams* params)
 
 	//record commands:
 	//---------------
-	_draw_record_particle_compute_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_particle_compute_commands(s, params, dt, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
 	_draw_record_render_pass_start_commands(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 	_draw_record_particle_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
@@ -1006,6 +1013,80 @@ static void _draw_destroy_particle_compute_descriptors(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
+static bool _draw_initialize_particles(DrawState* s)
+{
+	VKHcomputePipeline* pipeline;
+	VKHdescriptorSets* descriptorSets;
+
+	//create pipeline:
+	//---------------
+	pipeline = vkh_compute_pipeline_create();
+	if(!pipeline)
+		return false;
+
+	uint64 computeCodeSize;
+	uint32 *computeCode = vkh_load_spirv("assets/spirv/particle_generate.comp.spv", &computeCodeSize);
+	VkShaderModule computeModule = vkh_create_shader_module(s->instance, computeCodeSize, computeCode);
+	vkh_compute_pipeline_set_shader(pipeline, computeModule);
+
+	VkDescriptorSetLayoutBinding particleLayoutBinding = {};
+	particleLayoutBinding.binding = 0;
+	particleLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	particleLayoutBinding.descriptorCount = 1;
+	particleLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	particleLayoutBinding.pImmutableSamplers = nullptr;
+
+	vkh_compute_pipeline_add_desc_set_binding(pipeline, particleLayoutBinding);
+
+	if(!vkh_compute_pipeline_generate(pipeline, s->instance))
+		return false;
+
+	//create descriptor sets:
+	//---------------
+	descriptorSets = vkh_descriptor_sets_create(1);
+	if(!descriptorSets)
+		return false;
+
+	VkDescriptorBufferInfo particleBufferInfo = {};
+	particleBufferInfo.buffer = s->particleBuffer;
+	particleBufferInfo.offset = 0;
+	particleBufferInfo.range = VK_WHOLE_SIZE;
+
+	vkh_descriptor_sets_add_buffers(descriptorSets, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+		0, 0, 1, &particleBufferInfo);
+	
+	if(!vkh_desctiptor_sets_generate(descriptorSets, s->instance, pipeline->descriptorLayout))
+		return false;
+
+	//run pipeline:
+	//---------------
+	VkCommandBuffer commandBuf = vkh_start_single_time_command(s->instance);
+
+	uint32 dynamicOffset = 0;
+	vkCmdBindPipeline(commandBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+	vkCmdBindDescriptorSets(commandBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout, 0, 1, &descriptorSets->sets[0], 1, &dynamicOffset);
+	vkCmdDispatch(commandBuf, DRAW_NUM_PARTICLES / DRAW_PARTICLE_WORK_GROUP_SIZE, 1, 1);
+
+	vkh_end_single_time_command(s->instance, commandBuf);
+
+	vkDeviceWaitIdle(s->instance->device);
+
+	//cleanup:
+	//---------------
+	vkh_descriptor_sets_cleanup(descriptorSets, s->instance);
+	vkh_descriptor_sets_destroy(descriptorSets);
+	
+	vkh_compute_pipeline_cleanup(pipeline, s->instance);
+	vkh_compute_pipeline_destroy(pipeline);
+
+	vkh_free_spirv(computeCode);
+	vkh_destroy_shader_module(s->instance, computeModule);
+
+	return true;
+}
+
+//----------------------------------------------------------------------------//
+
 static void _draw_record_render_pass_start_commands(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	//render pass begin:
@@ -1093,7 +1174,7 @@ static void _draw_record_grid_commands(DrawState* s, DrawParams* params, VkComma
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 }
 
-static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
+static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, f32 dt, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	//write barrier: (ensures compute shader will not run while buffer is being read from)
 	//---------------
@@ -1120,7 +1201,7 @@ static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* par
 	ParticleComputeParamsGPU computeParams = { (f32)glfwGetTime() };
 	vkCmdPushConstants(commandBuffer, s->particleComputePipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
 
-	vkCmdDispatch(commandBuffer, 1, 1, 1);
+	vkCmdDispatch(commandBuffer, DRAW_NUM_PARTICLES / DRAW_PARTICLE_WORK_GROUP_SIZE, 1, 1);
 }
 
 static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
@@ -1139,7 +1220,7 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 
 	//draw:
 	//---------------
-	vkCmdDrawIndexed(commandBuffer, 6, params->numParticles, 0, 0, 0);
+	vkCmdDrawIndexed(commandBuffer, 6, DRAW_NUM_PARTICLES, 0, 0, 0);
 }
 
 //----------------------------------------------------------------------------//
@@ -1162,12 +1243,12 @@ static void _draw_window_resized(DrawState* s)
 
 //----------------------------------------------------------------------------//
 
-static void _draw_message_log(const char *message, const char *file, int32 line)
+static void _draw_message_log(const char* message, const char* file, int32 line)
 {
-	printf("RENDER MESSAGE in %s at line %i - \"%s\"\n\n", file, line, message);
+	printf("DRAW MESSAGE in %s at line %i - \"%s\"\n\n", file, line, message);
 }
 
-static void _draw_error_log(const char *message, const char *file, int32 line)
+static void _draw_error_log(const char* message, const char* file, int32 line)
 {
-	printf("RENDER ERROR in %s at line %i - \"%s\"\n\n", file, line, message);
+	printf("DRAW ERROR in %s at line %i - \"%s\"\n\n", file, line, message);
 }

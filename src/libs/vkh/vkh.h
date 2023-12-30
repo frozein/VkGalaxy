@@ -171,6 +171,11 @@ void           vkh_destroy_shader_module(VKHinstance* instance, VkShaderModule m
 
 //----------------------------------------------------------------------------//
 
+VkCommandBuffer vkh_start_single_time_command(VKHinstance* inst);
+void            vkh_end_single_time_command  (VKHinstance* inst, VkCommandBuffer commandBuffer);
+
+//----------------------------------------------------------------------------//
+
 //NOTE: only supports 1 desciptor layout, FIXME
 //NOTE: only supports vert/frag shaders, FIXME
 VKHgraphicsPipeline* vkh_pipeline_create    ();

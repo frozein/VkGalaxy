@@ -25,9 +25,6 @@ static void _vkh_destroy_command_pool(VKHinstance* instance);
 
 //----------------------------------------------------------------------------//
 
-static VkCommandBuffer _vkh_start_single_time_command(VKHinstance* instance);
-static void _vkh_end_single_time_command(VKHinstance* instance, VkCommandBuffer buffer);
-
 static uint32_t _vkh_find_memory_type(VKHinstance* instance, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 //----------------------------------------------------------------------------//
@@ -233,7 +230,7 @@ void vkh_destroy_buffer(VKHinstance* inst, VkBuffer buffer, VkDeviceMemory memor
 
 void vkh_copy_buffer(VKHinstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize size, uint64_t srcOffset, uint64_t dstOffset)
 {
-	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = vkh_start_single_time_command(inst);
 
 	VkBufferCopy copyRegion = {0};
 	copyRegion.srcOffset = srcOffset;
@@ -241,12 +238,12 @@ void vkh_copy_buffer(VKHinstance* inst, VkBuffer src, VkBuffer dst, VkDeviceSize
 	copyRegion.size = size;
 	vkCmdCopyBuffer(commandBuffer, src, dst, 1, &copyRegion);
 
-	_vkh_end_single_time_command(inst, commandBuffer);
+	vkh_end_single_time_command(inst, commandBuffer);
 }
 
 void vkh_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 {
-	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = vkh_start_single_time_command(inst);
 
 	VkBufferImageCopy region = {0};
 	region.bufferOffset = 0;
@@ -261,7 +258,7 @@ void vkh_copy_buffer_to_image(VKHinstance* inst, VkBuffer buffer, VkImage image,
 
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	_vkh_end_single_time_command(inst, commandBuffer);
+	vkh_end_single_time_command(inst, commandBuffer);
 }
 
 void vkh_copy_with_staging_buf(VKHinstance* inst, VkBuffer stagingBuf, VkDeviceMemory stagingBufMem, VkBuffer buf, uint64_t size, uint64_t offset, void* data)
@@ -287,7 +284,7 @@ void vkh_copy_with_staging_buf_implicit(VKHinstance* inst, VkBuffer buf, uint64_
 
 void vkh_transition_image_layout(VKHinstance* inst, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
 {
-	VkCommandBuffer commandBuffer = _vkh_start_single_time_command(inst);
+	VkCommandBuffer commandBuffer = vkh_start_single_time_command(inst);
 
 	VkImageMemoryBarrier barrier = {0};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -330,7 +327,7 @@ void vkh_transition_image_layout(VKHinstance* inst, VkImage image, VkFormat form
 
 	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
-	_vkh_end_single_time_command(inst, commandBuffer);
+	vkh_end_single_time_command(inst, commandBuffer);
 }
 
 uint32_t* vkh_load_spirv(const char* path, uint64_t* size)
@@ -383,6 +380,42 @@ VkShaderModule vkh_create_shader_module(VKHinstance* inst, uint64_t codeSize, ui
 void vkh_destroy_shader_module(VKHinstance* inst, VkShaderModule module)
 {
 	vkDestroyShaderModule(inst->device, module, NULL);
+}
+
+//----------------------------------------------------------------------------//
+
+VkCommandBuffer vkh_start_single_time_command(VKHinstance* inst)
+{
+	VkCommandBufferAllocateInfo allocInfo = {0};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = inst->commandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(inst->device, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo = {0};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	return commandBuffer;
+}
+
+void vkh_end_single_time_command(VKHinstance* inst, VkCommandBuffer commandBuffer)
+{
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {0};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(inst->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(inst->graphicsQueue);
+
+	vkFreeCommandBuffers(inst->device, inst->commandPool, 1, &commandBuffer);
 }
 
 //----------------------------------------------------------------------------//
@@ -1635,40 +1668,6 @@ static void _vkh_destroy_command_pool(VKHinstance* inst)
 }
 
 //----------------------------------------------------------------------------//
-
-static VkCommandBuffer _vkh_start_single_time_command(VKHinstance* inst)
-{
-	VkCommandBufferAllocateInfo allocInfo = {0};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = inst->commandPool;
-	allocInfo.commandBufferCount = 1;
-
-	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(inst->device, &allocInfo, &commandBuffer);
-
-	VkCommandBufferBeginInfo beginInfo = {0};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
-	return commandBuffer;
-}
-
-static void _vkh_end_single_time_command(VKHinstance* inst, VkCommandBuffer commandBuffer)
-{
-	vkEndCommandBuffer(commandBuffer);
-
-	VkSubmitInfo submitInfo = {0};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
-	vkQueueSubmit(inst->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(inst->graphicsQueue);
-
-	vkFreeCommandBuffers(inst->device, inst->commandPool, 1, &commandBuffer);
-}
 
 static uint32_t _vkh_find_memory_type(VKHinstance* inst, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
