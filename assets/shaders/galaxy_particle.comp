@@ -26,5 +26,5 @@ layout(push_constant) uniform Params
 
 void main()
 {
-    particles[gl_GlobalInvocationID.x].pos.y += 5.0 * u_dt * (float(gl_GlobalInvocationID.x) / 1024.0);
+    //particles[gl_GlobalInvocationID.x].pos.y += 5.0 * u_dt * (float(gl_GlobalInvocationID.x) / 1024.0);
 }

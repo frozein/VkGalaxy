@@ -5,7 +5,7 @@
 
 //----------------------------------------------------------------------------//
 
-#define DRAW_NUM_PARTICLES 1024
+#define DRAW_NUM_PARTICLES 4096
 #define DRAW_PARTICLE_WORK_GROUP_SIZE 256
 
 //----------------------------------------------------------------------------//
@@ -161,7 +161,7 @@ bool draw_init(DrawState** state)
 	if(!_draw_create_grid_descriptors(s))
 		return false;
 
-	// initialize galaxy particle drawing objects:
+	//initialize particle drawing objects:
 	//---------------
 	if(!_draw_create_particle_pipeline(s))
 		return false;

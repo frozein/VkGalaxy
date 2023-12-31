@@ -2,6 +2,8 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
+#define PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062
+
 //----------------------------------------------------------------------------//
 
 struct Particle
@@ -19,8 +21,31 @@ layout(std140, binding = 0) buffer Particles
 
 //----------------------------------------------------------------------------//
 
+uint u_totalParticles = 4096;
+uint u_numEllipses = 32;
+uint u_particlesPerEllipse = u_totalParticles / u_numEllipses;
+
+float u_angleOffset = 0.15;
+float u_radOffset = 100.0;
+float u_eccentricity = 0.85;
+
 void main()
 {
-    particles[gl_GlobalInvocationID.x].pos = vec3(gl_GlobalInvocationID.x * 50.0, 150.0, 0.0);
-    particles[gl_GlobalInvocationID.x].scale = 20.0;
+	float rad = (gl_GlobalInvocationID.x / u_particlesPerEllipse + 1) * u_radOffset;
+	float angle = (float(gl_GlobalInvocationID.x % u_particlesPerEllipse) / u_particlesPerEllipse) * 2.0 * PI;
+
+	vec3 pos;
+	pos.x = rad * cos(angle) * u_eccentricity;
+	pos.z = rad * sin(angle);
+
+	float newRad = length(pos.xz);
+	float newAngle = atan(pos.z, pos.x);
+	newAngle += (gl_GlobalInvocationID.x / u_particlesPerEllipse + 1) * u_angleOffset;
+
+	pos.x = newRad * cos(newAngle);
+	pos.z = newRad * sin(newAngle);
+	pos.y = 100.0;
+
+    particles[gl_GlobalInvocationID.x].pos = pos;
+    particles[gl_GlobalInvocationID.x].scale = 25.0;
 }
