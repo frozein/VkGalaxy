@@ -5,7 +5,7 @@
 
 //----------------------------------------------------------------------------//
 
-#define DRAW_NUM_PARTICLES 4096
+#define DRAW_NUM_PARTICLES 256000
 #define DRAW_PARTICLE_WORK_GROUP_SIZE 256
 
 //----------------------------------------------------------------------------//
@@ -33,8 +33,8 @@ struct GridParamsFragGPU
 	f32 scroll;
 };
 
-//parameters for particle compute shader
-struct ParticleComputeParamsGPU
+//parameters for particle vertex shader
+struct ParticleParamsVertGPU
 {
 	f32 time;
 };
@@ -77,17 +77,11 @@ static void _draw_destroy_grid_descriptors(DrawState* state);
 static bool _draw_create_particle_pipeline(DrawState* state);
 static void _draw_destroy_particle_pipeline(DrawState* state);
 
-static bool _draw_create_particle_compute_pipeline(DrawState* state);
-static void _draw_destroy_particle_compute_pipeline(DrawState* state);
-
 static bool _draw_create_particle_buffer(DrawState* state);
 static void _draw_destroy_particle_buffer(DrawState* state);
 
 static bool _draw_create_particle_descriptors(DrawState* state);
 static void _draw_destroy_particle_descriptors(DrawState* state);
-
-static bool _draw_create_particle_compute_descriptors(DrawState* state);
-static void _draw_destroy_particle_compute_descriptors(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
@@ -95,9 +89,8 @@ static bool _draw_initialize_particles(DrawState* state);
 
 //----------------------------------------------------------------------------//
 
-static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, f32 dt, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
-
 static void _draw_record_render_pass_start_commands(DrawState* s, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
+
 static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 static void _draw_record_grid_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx);
 
@@ -166,16 +159,10 @@ bool draw_init(DrawState** state)
 	if(!_draw_create_particle_pipeline(s))
 		return false;
 
-	if(!_draw_create_particle_compute_pipeline(s))
-		return false;
-
 	if(!_draw_create_particle_buffer(s))
 		return false;
 
 	if(!_draw_create_particle_descriptors(s))
-		return false;
-
-	if(!_draw_create_particle_compute_descriptors(s))
 		return false;
 
 	if(!_draw_initialize_particles(s))
@@ -188,10 +175,8 @@ void draw_quit(DrawState* s)
 {
 	vkDeviceWaitIdle(s->instance->device);
 
-	_draw_destroy_particle_compute_descriptors(s);
 	_draw_destroy_particle_descriptors(s);
 	_draw_destroy_particle_buffer(s);
-	_draw_destroy_particle_compute_pipeline(s);
 	_draw_destroy_particle_pipeline(s);
 
 	_draw_destroy_grid_descriptors(s);
@@ -265,9 +250,8 @@ void draw_render(DrawState* s, DrawParams* params, f32 dt)
 
 	//record commands:
 	//---------------
-	_draw_record_particle_compute_commands(s, params, dt, s->commandBuffers[frameIdx], frameIdx, imageIdx);
-
 	_draw_record_render_pass_start_commands(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	
 	_draw_record_particle_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 	_draw_record_grid_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
@@ -407,15 +391,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	attachmentDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 	attachmentDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-	VkSubpassDependency computeDependency = {};
-	computeDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-	computeDependency.dstSubpass = 0;
-	computeDependency.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	computeDependency.srcAccessMask = 0;
-	computeDependency.dstStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	computeDependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-	VkSubpassDependency dependencies[2] = {attachmentDependency, computeDependency};
+	VkSubpassDependency dependencies[1] = {attachmentDependency};
 
 	//create render pass:
 	//---------------
@@ -428,7 +404,7 @@ static bool _draw_create_final_render_pass(DrawState* s)
 	renderPassCreateInfo.pAttachments = attachments;
 	renderPassCreateInfo.subpassCount = 1;
 	renderPassCreateInfo.pSubpasses = &subpass;
-	renderPassCreateInfo.dependencyCount = 2;
+	renderPassCreateInfo.dependencyCount = 1;
 	renderPassCreateInfo.pDependencies = dependencies;
 
 	if(vkCreateRenderPass(s->instance->device, &renderPassCreateInfo, nullptr, &s->finalRenderPass) != VK_SUCCESS)
@@ -837,16 +813,10 @@ static bool _draw_create_particle_pipeline(DrawState* s)
 	//---------------
 	VkPushConstantRange vertPushConstant = {};
 	vertPushConstant.offset = 0;
-	vertPushConstant.size = sizeof(GridParamsVertGPU);
+	vertPushConstant.size = sizeof(ParticleParamsVertGPU);
 	vertPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkPushConstantRange fragPushConstant = {};
-	fragPushConstant.offset = sizeof(GridParamsVertGPU);
-	fragPushConstant.size = sizeof(GridParamsFragGPU);
-	fragPushConstant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
 	vkh_pipeline_add_push_constant(s->particlePipeline, vertPushConstant);
-	vkh_pipeline_add_push_constant(s->particlePipeline, fragPushConstant);
 
 	//set states:
 	//---------------
@@ -881,61 +851,6 @@ static void _draw_destroy_particle_pipeline(DrawState* s)
 {
 	vkh_pipeline_cleanup(s->particlePipeline, s->instance);
 	vkh_pipeline_destroy(s->particlePipeline);
-}
-
-static bool _draw_create_particle_compute_pipeline(DrawState* s)
-{
-	//create pipeline object:
-	//---------------
-	s->particleComputePipeline = vkh_compute_pipeline_create();
-	if(!s->particleComputePipeline)
-		return false;
-
-	//set shaders:
-	//---------------
-	uint64 computeCodeSize;
-	uint32 *computeCode = vkh_load_spirv("assets/spirv/galaxy_particle.comp.spv", &computeCodeSize);
-	VkShaderModule computeModule = vkh_create_shader_module(s->instance, computeCodeSize, computeCode);
-
-	vkh_compute_pipeline_set_shader(s->particleComputePipeline, computeModule);
-
-	//add descriptor set layout bindings:
-	//---------------
-	VkDescriptorSetLayoutBinding particleLayoutBinding = {};
-	particleLayoutBinding.binding = 0;
-	particleLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-	particleLayoutBinding.descriptorCount = 1;
-	particleLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-	particleLayoutBinding.pImmutableSamplers = nullptr;
-
-	vkh_compute_pipeline_add_desc_set_binding(s->particleComputePipeline, particleLayoutBinding);
-
-	//add push constsants:
-	//---------------
-	VkPushConstantRange pushConstants = {};
-	pushConstants.offset = 0;
-	pushConstants.size = sizeof(ParticleComputeParamsGPU);
-	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-	vkh_compute_pipeline_add_push_constant(s->particleComputePipeline, pushConstants);
-
-	//generate pipeline:
-	//---------------
-	if(!vkh_compute_pipeline_generate(s->particleComputePipeline, s->instance))
-		return false;
-
-	//cleanup:
-	//---------------
-	vkh_free_spirv(computeCode);
-	vkh_destroy_shader_module(s->instance, computeModule);
-
-	return true;
-}
-
-static void _draw_destroy_particle_compute_pipeline(DrawState* s)
-{
-	vkh_compute_pipeline_cleanup(s->particleComputePipeline, s->instance);
-	vkh_compute_pipeline_destroy(s->particleComputePipeline);
 }
 
 static bool _draw_create_particle_buffer(DrawState* s)
@@ -986,29 +901,6 @@ static void _draw_destroy_particle_descriptors(DrawState* s)
 {
 	vkh_descriptor_sets_cleanup(s->particleDescriptorSets, s->instance);
 	vkh_descriptor_sets_destroy(s->particleDescriptorSets);
-}
-
-static bool _draw_create_particle_compute_descriptors(DrawState* s)
-{
-	s->particleComputeDescriptorSets = vkh_descriptor_sets_create(1);
-	if(!s->particleComputeDescriptorSets)
-		return false;
-
-	VkDescriptorBufferInfo particleBufferInfo = {};
-	particleBufferInfo.buffer = s->particleBuffer;
-	particleBufferInfo.offset = 0;
-	particleBufferInfo.range = VK_WHOLE_SIZE;
-
-	vkh_descriptor_sets_add_buffers(s->particleComputeDescriptorSets, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
-		0, 0, 1, &particleBufferInfo);
-	
-	return vkh_desctiptor_sets_generate(s->particleComputeDescriptorSets, s->instance, s->particleComputePipeline->descriptorLayout);
-}
-
-static void _draw_destroy_particle_compute_descriptors(DrawState* s)
-{
-	vkh_descriptor_sets_cleanup(s->particleComputeDescriptorSets, s->instance);
-	vkh_descriptor_sets_destroy(s->particleComputeDescriptorSets);
 }
 
 //----------------------------------------------------------------------------//
@@ -1174,36 +1066,6 @@ static void _draw_record_grid_commands(DrawState* s, DrawParams* params, VkComma
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
 }
 
-static void _draw_record_particle_compute_commands(DrawState* s, DrawParams* params, f32 dt, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
-{
-	//write barrier: (ensures compute shader will not run while buffer is being read from)
-	//---------------
-	VkBufferMemoryBarrier writeBarrier = {};
-	writeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-	writeBarrier.srcAccessMask = 0;
-	writeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-	writeBarrier.srcQueueFamilyIndex = s->instance->graphicsComputeFamilyIdx;
-	writeBarrier.dstQueueFamilyIndex = s->instance->graphicsComputeFamilyIdx;
-	writeBarrier.buffer = s->particleBuffer;
-	writeBarrier.offset = 0;
-	writeBarrier.size = VK_WHOLE_SIZE;
-
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-							VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, NULL, 1, &writeBarrier, 0, NULL);
-
-	//dispatch:
-	//---------------
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->particleComputePipeline->pipeline);
-
-	uint32 dynamicOffset = 0;
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, s->particleComputePipeline->layout, 0, 1, &s->particleComputeDescriptorSets->sets[0], 1, &dynamicOffset);
-
-	ParticleComputeParamsGPU computeParams = { (f32)glfwGetTime() };
-	vkCmdPushConstants(commandBuffer, s->particleComputePipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleComputeParamsGPU), &computeParams);
-
-	vkCmdDispatch(commandBuffer, DRAW_NUM_PARTICLES / DRAW_PARTICLE_WORK_GROUP_SIZE, 1, 1);
-}
-
 static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkCommandBuffer commandBuffer, uint32 frameIndex, uint32 imageIdx)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->pipeline);
@@ -1217,6 +1079,11 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 
 	uint32 dynamicOffset = 0;
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->layout, 0, 1, &s->particleDescriptorSets->sets[frameIndex], 1, &dynamicOffset);
+
+	//send vertex stage params:
+	//---------------
+	ParticleParamsVertGPU vertParams = { (float)glfwGetTime() };
+	vkCmdPushConstants(commandBuffer, s->particlePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ParticleParamsVertGPU), &vertParams);
 
 	//draw:
 	//---------------

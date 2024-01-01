@@ -51,9 +51,6 @@ struct DrawState
 	VKHgraphicsPipeline* particlePipeline;
 	VKHdescriptorSets* particleDescriptorSets;
 
-	VKHcomputePipeline* particleComputePipeline;
-	VKHdescriptorSets* particleComputeDescriptorSets;
-
 	VkDeviceSize particleBufferSize;
 	VkBuffer particleBuffer;
 	VkDeviceMemory particleBufferMemory;
@@ -69,8 +66,13 @@ struct Vertex
 
 struct GalaxyParticle
 {
-	qm::vec3 pos;
-	float scale;
+	qm::vec2 pos;
+	float height;
+	float angle;
+	float tiltAngle;
+	float angleVel;
+
+	float padding1, padding2;
 };
 
 //----------------------------------------------------------------------------//

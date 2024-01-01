@@ -1,6 +1,7 @@
 #version 450
 
 layout(location = 0) in vec2 a_texPos;
+layout(location = 1) flat in uint a_instanceIdx;
 
 //----------------------------------------------------------------------------//
 

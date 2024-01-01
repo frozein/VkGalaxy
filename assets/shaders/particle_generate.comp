@@ -8,8 +8,11 @@ layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle
 {
-	vec3 pos;
-	float scale;
+	vec2 pos;
+	float height;
+	float angle;
+	float tiltAngle;
+	float angleVel;
 };
 
 //----------------------------------------------------------------------------//
@@ -21,31 +24,61 @@ layout(std140, binding = 0) buffer Particles
 
 //----------------------------------------------------------------------------//
 
-uint u_totalParticles = 4096;
-uint u_numEllipses = 32;
-uint u_particlesPerEllipse = u_totalParticles / u_numEllipses;
+float u_bulgeRad = 250.0;
 
-float u_angleOffset = 0.15;
-float u_radOffset = 100.0;
+float u_angleOffset = 2.0 * PI;
 float u_eccentricity = 0.85;
+
+float u_maxRad = 3500.0;
+
+//----------------------------------------------------------------------------//
+
+float _SEED = 0.0;
+
+float rand()
+{
+    return fract(sin(_SEED++) * 43758.5453);
+}
+
+void srand(float seed)
+{
+	_SEED = seed;
+}
+
+//----------------------------------------------------------------------------//
+
+vec2 orbit(float rad, float angle)
+{
+	vec2 pos = rad * vec2(cos(angle) * u_eccentricity, sin(angle));
+
+	float newRad = length(pos);
+	float newAngle = atan(pos.x, pos.y) + u_angleOffset * (max(rad, 0.0) / u_maxRad);
+
+	return newRad * vec2(cos(newAngle), sin(newAngle));
+}
+
+float rand_radius()
+{
+	return rand() * u_maxRad;
+}
+
+//----------------------------------------------------------------------------//
 
 void main()
 {
-	float rad = (gl_GlobalInvocationID.x / u_particlesPerEllipse + 1) * u_radOffset;
-	float angle = (float(gl_GlobalInvocationID.x % u_particlesPerEllipse) / u_particlesPerEllipse) * 2.0 * PI;
+	srand(float(gl_GlobalInvocationID.x));
 
-	vec3 pos;
-	pos.x = rad * cos(angle) * u_eccentricity;
-	pos.z = rad * sin(angle);
+	float rad = rand_radius();
+	float angle = rand() * 2.0 * PI;
+	float tiltAngle = (rad / u_maxRad) * u_angleOffset;
+	float angleVel = -10.0 * sqrt(1.0 / rad);
 
-	float newRad = length(pos.xz);
-	float newAngle = atan(pos.z, pos.x);
-	newAngle += (gl_GlobalInvocationID.x / u_particlesPerEllipse + 1) * u_angleOffset;
+	Particle particle;
+	particle.pos = vec2(rad, u_eccentricity * rad);
+	particle.height = 100.0 + 50.0 * (rand() * 2.0 - 1.0);
+	particle.angle = angle;
+	particle.tiltAngle = tiltAngle;
+	particle.angleVel = angleVel;
 
-	pos.x = newRad * cos(newAngle);
-	pos.z = newRad * sin(newAngle);
-	pos.y = 100.0;
-
-    particles[gl_GlobalInvocationID.x].pos = pos;
-    particles[gl_GlobalInvocationID.x].scale = 25.0;
+	particles[gl_GlobalInvocationID.x] = particle;
 }
