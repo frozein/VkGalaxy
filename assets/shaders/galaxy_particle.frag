@@ -1,7 +1,7 @@
 #version 450
 
 layout(location = 0) in vec2 a_texPos;
-layout(location = 1) in float a_opacity;
+layout(location = 1) in vec4 a_color;
 
 //----------------------------------------------------------------------------//
 
@@ -15,5 +15,5 @@ void main()
 	if(dot(centeredPos, centeredPos) > 1.0)
 		discard;
 
-	o_color = vec4(vec3(1.0), a_opacity);
+	o_color = a_color;
 }

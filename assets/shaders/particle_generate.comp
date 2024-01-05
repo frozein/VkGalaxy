@@ -14,6 +14,7 @@ struct Particle
 	float tiltAngle;
 	float angleVel;
 	float opacity;
+	float temp;
 };
 
 //----------------------------------------------------------------------------//
@@ -25,13 +26,20 @@ layout(std140, binding = 0) buffer Particles
 
 //----------------------------------------------------------------------------//
 
+float u_maxRad = 3500.0;
 float u_bulgeRad = 1250.0;
 
 float u_baseHeight = 300.0;
+float u_height = 100.0;
+
 float u_angleOffset = 2.0 * PI;
 float u_eccentricity = 0.85;
 
-float u_maxRad = 3500.0;
+float u_minTemp = 3000.0;
+float u_maxTemp = 7000.0;
+
+float u_minOpacity = 0.1;
+float u_maxOpacity = 0.5;
 
 //----------------------------------------------------------------------------//
 
@@ -72,7 +80,7 @@ void main()
 	if(rad < u_bulgeRad)
 		height = u_baseHeight + (50.0 + 100.0 * cos(PI * rad / u_bulgeRad)) * (rand() * 2.0 - 1.0);
 	else
-		height = u_baseHeight + 50.0 * (rand() * 2.0 - 1.0);
+		height = u_baseHeight + (u_height * 0.5) * (rand() * 2.0 - 1.0);
 
 	Particle particle;
 	particle.pos = vec2(rad, u_eccentricity * rad);
@@ -80,7 +88,8 @@ void main()
 	particle.angle = angle;
 	particle.tiltAngle = tiltAngle;
 	particle.angleVel = angleVel;
-	particle.opacity = 0.1 + rand() * 0.4;
+	particle.opacity = u_minOpacity + (u_maxOpacity - u_minOpacity) * rand();
+	particle.temp = u_minTemp + (u_maxTemp - u_minTemp) * rand();
 
 	particles[gl_GlobalInvocationID.x] = particle;
 }
