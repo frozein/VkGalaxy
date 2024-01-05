@@ -13,6 +13,7 @@ struct Particle
 	float angle;
 	float tiltAngle;
 	float angleVel;
+	float opacity;
 };
 
 //----------------------------------------------------------------------------//
@@ -26,7 +27,7 @@ layout(std140, binding = 0) buffer Particles
 
 float u_bulgeRad = 1250.0;
 
-float u_baseHeight = 500.0;
+float u_baseHeight = 300.0;
 float u_angleOffset = 2.0 * PI;
 float u_eccentricity = 0.85;
 
@@ -60,7 +61,7 @@ float rand_radius()
 
 void main()
 {
-	srand(float(gl_GlobalInvocationID.x));
+	srand(gl_GlobalInvocationID.x / 1024.0); //particles spawn on top of each other unless i divide by a constant
 
 	float rad = rand_radius();
 	float angle = rand() * 2.0 * PI;
@@ -79,6 +80,7 @@ void main()
 	particle.angle = angle;
 	particle.tiltAngle = tiltAngle;
 	particle.angleVel = angleVel;
+	particle.opacity = 0.1 + rand() * 0.4;
 
 	particles[gl_GlobalInvocationID.x] = particle;
 }

@@ -5,7 +5,7 @@
 
 //----------------------------------------------------------------------------//
 
-#define DRAW_NUM_PARTICLES 512000
+#define DRAW_NUM_PARTICLES 75008
 #define DRAW_PARTICLE_WORK_GROUP_SIZE 256
 
 //----------------------------------------------------------------------------//
@@ -115,7 +115,7 @@ bool draw_init(DrawState** state)
 
 	//create render state:
 	//---------------
-	if(!vkh_init(&s->instance, 1920, 1080, "VulkanCraft"))
+	if(!vkh_init(&s->instance, 1920, 1080, "VkGalaxy"))
 	{
 		ERROR_LOG("failed to initialize render instance");
 		return false;
@@ -251,9 +251,9 @@ void draw_render(DrawState* s, DrawParams* params, f32 dt)
 	//record commands:
 	//---------------
 	_draw_record_render_pass_start_commands(s, s->commandBuffers[frameIdx], frameIdx, imageIdx);
-	
-	_draw_record_particle_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+
 	_draw_record_grid_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
+	_draw_record_particle_commands(s, params, s->commandBuffers[frameIdx], frameIdx, imageIdx);
 
 	//end command buffer:
 	//---------------
@@ -771,41 +771,17 @@ static bool _draw_create_particle_pipeline(DrawState* s)
 	vkh_pipeline_add_dynamic_state(s->particlePipeline, VK_DYNAMIC_STATE_VIEWPORT);
 	vkh_pipeline_add_dynamic_state(s->particlePipeline, VK_DYNAMIC_STATE_SCISSOR);
 
-	//add vertex input info:
-	//---------------
-	VkVertexInputBindingDescription vertBindingDescription = {};
-	vertBindingDescription.binding = 0;
-	vertBindingDescription.stride = sizeof(Vertex);
-	vertBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	vkh_pipeline_add_vertex_input_binding(s->particlePipeline, vertBindingDescription);
-
-	VkVertexInputAttributeDescription vertPositionAttrib = {};
-	vertPositionAttrib.binding = 0;
-	vertPositionAttrib.location = 0;
-	vertPositionAttrib.format = VK_FORMAT_R32G32B32_SFLOAT;
-	vertPositionAttrib.offset = offsetof(Vertex, pos);
-
-	VkVertexInputAttributeDescription vertTexCoordAttrib = {};
-	vertTexCoordAttrib.binding = 0;
-	vertTexCoordAttrib.location = 1;
-	vertTexCoordAttrib.format = VK_FORMAT_R32G32_SFLOAT;
-	vertTexCoordAttrib.offset = offsetof(Vertex, texCoord);
-
-	vkh_pipeline_add_vertex_input_attrib(s->particlePipeline, vertPositionAttrib);
-	vkh_pipeline_add_vertex_input_attrib(s->particlePipeline, vertTexCoordAttrib);
-
 	//add color blend attachments:
 	//---------------
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.blendEnable = VK_TRUE;
 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 
 	vkh_pipeline_add_color_blend_attachment(s->particlePipeline, colorBlendAttachment);
 
@@ -827,7 +803,7 @@ static bool _draw_create_particle_pipeline(DrawState* s)
 
 	vkh_pipeline_set_multisample_state(s->particlePipeline, VK_SAMPLE_COUNT_1_BIT, VK_FALSE, 1.0f, NULL, VK_FALSE, VK_FALSE);
 
-	vkh_pipeline_set_depth_stencil_state(s->particlePipeline, VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
+	vkh_pipeline_set_depth_stencil_state(s->particlePipeline, VK_FALSE, VK_FALSE, VK_COMPARE_OP_LESS, VK_FALSE, VK_FALSE, {}, {}, 0.0f, 1.0f);
 
 	vkh_pipeline_set_color_blend_state(s->particlePipeline, VK_FALSE, VK_LOGIC_OP_COPY, 0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -1070,13 +1046,8 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->pipeline);
 
-	//bind buffers:
+	//bind descriptor sets:
 	//---------------
-	VkBuffer vertexBuffers[] = {s->quadVertexBuffer};
-	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-	vkCmdBindIndexBuffer(commandBuffer, s->quadIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
 	uint32 dynamicOffset = 0;
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s->particlePipeline->layout, 0, 1, &s->particleDescriptorSets->sets[frameIndex], 1, &dynamicOffset);
 
@@ -1087,7 +1058,7 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 
 	//draw:
 	//---------------
-	vkCmdDrawIndexed(commandBuffer, 6, DRAW_NUM_PARTICLES, 0, 0, 0);
+	vkCmdDraw(commandBuffer, 6 * DRAW_NUM_PARTICLES, 1, 0, 0);
 }
 
 //----------------------------------------------------------------------------//

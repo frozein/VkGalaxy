@@ -1,12 +1,19 @@
 #version 430
 
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec2 a_texPos;
+#define NUM_VERTICES 6
+const vec3 VERTICES[NUM_VERTICES] = {
+	vec3(-1.0, 0.0, -1.0),
+	vec3( 1.0, 0.0, -1.0),
+	vec3(-1.0, 0.0,  1.0),
+	vec3( 1.0, 0.0, -1.0),
+	vec3(-1.0, 0.0,  1.0), 
+	vec3( 1.0, 0.0,  1.0)
+};
 
 //----------------------------------------------------------------------------//
 
 layout(location = 0) out vec2 o_texPos;
-layout(location = 1) flat out uint o_instanceIdx;
+layout(location = 1) out float o_opacity;
 
 //----------------------------------------------------------------------------//
 
@@ -17,6 +24,7 @@ struct Particle
 	float angle;
 	float tiltAngle;
 	float angleVel;
+	float opacity;
 };
 
 //----------------------------------------------------------------------------//
@@ -59,14 +67,17 @@ vec2 calc_pos(Particle particle)
 
 void main()
 {
+	vec3 a_pos    = VERTICES[gl_VertexIndex % NUM_VERTICES] * 0.5;
+	vec2 a_texPos = VERTICES[gl_VertexIndex % NUM_VERTICES].xz;
+
 	vec3 camRight = vec3(u_view[0][0], u_view[1][0], u_view[2][0]);
 	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
 
-	Particle particle = particles[gl_InstanceIndex];
+	Particle particle = particles[gl_VertexIndex / NUM_VERTICES];
 	vec2 pos = calc_pos(particle);
 	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * 10.0;
 
 	o_texPos = a_texPos;
-	o_instanceIdx = gl_InstanceIndex;
+	o_opacity = particle.opacity;
 	gl_Position = u_viewProj * vec4(worldspacePos, 1.0);
 }

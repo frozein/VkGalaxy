@@ -3,7 +3,7 @@
 //----------------------------------------------------------------------------//
 
 #define CAMERA_FOV 45.0f
-#define CAMERA_MAX_DIST 16000.0f
+#define CAMERA_MAX_DIST 8000.0f
 #define CAMERA_MIN_TILT 15.0f
 #define CAMERA_MAX_TILT 89.0f
 
@@ -78,11 +78,28 @@ void game_main_loop(GameState* s)
 {
 	f32 lastTime = (f32)glfwGetTime();
 
+	f32 accumTime = 0.0f;
+	uint32 accumFrames = 0;
+
 	while(!glfwWindowShouldClose(s->drawState->instance->window))
 	{
 		f32 curTime = (f32)glfwGetTime();
 		f32 dt = curTime - lastTime;
 		lastTime = curTime;
+
+		accumTime += dt;
+		accumFrames++;
+		if(accumTime >= 1.0f)
+		{
+			float avgDt = accumTime / accumFrames;
+
+			char windowName[64];
+			snprintf(windowName, sizeof(windowName), "VkGalaxy [FPS: %.0f (%.2fms)]", 1.0f / avgDt, avgDt * 1000.0f);
+			glfwSetWindowTitle(s->drawState->instance->window, windowName);
+
+			accumTime -= 1.0f;
+			accumFrames = 0;
+		}
 
 		_game_camera_update(&s->cam, dt, s->drawState->instance->window);
 
