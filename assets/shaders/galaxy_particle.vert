@@ -64,7 +64,7 @@ void main()
 
 	Particle particle = particles[gl_InstanceIndex];
 	vec2 pos = calc_pos(particle);
-	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * 25.0;
+	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * 10.0;
 
 	o_texPos = a_texPos;
 	o_instanceIdx = gl_InstanceIndex;
