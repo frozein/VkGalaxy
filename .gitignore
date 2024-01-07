@@ -4,6 +4,7 @@
 
 # vscode configuration:
 .vscode/
+*.code-workspace
 
 # shader bytecode directory:
 spirv/
