@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec2 a_texPos;
 layout(location = 1) in vec4 a_color;
+layout(location = 2) in flat uint a_type;
 
 //----------------------------------------------------------------------------//
 
@@ -12,8 +13,18 @@ layout(location = 0) out vec4 o_color;
 void main() 
 {
 	vec2 centeredPos = 2.0 * (a_texPos - 0.5);
-	if(dot(centeredPos, centeredPos) > 1.0)
-		discard;
+	
+	vec4 color = a_color;
+	if(a_type == 0)
+	{
+		if(dot(centeredPos, centeredPos) > 1.0)
+			discard;
+	}
+	else
+	{
+		color.rgb *= vec3(0.5, 0.5, 1.0);
+		color.a *= max(1.0 - length(centeredPos), 0.0);
+	}
 
-	o_color = a_color;
+	o_color = color;
 }

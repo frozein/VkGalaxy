@@ -2,18 +2,19 @@
 
 #define NUM_VERTICES 6
 const vec3 VERTICES[NUM_VERTICES] = {
-	vec3(-1.0, 0.0, -1.0),
-	vec3( 1.0, 0.0, -1.0),
-	vec3(-1.0, 0.0,  1.0),
-	vec3( 1.0, 0.0, -1.0),
-	vec3(-1.0, 0.0,  1.0), 
-	vec3( 1.0, 0.0,  1.0)
+	vec3(-0.5, 0.0, -0.5),
+	vec3( 0.5, 0.0, -0.5),
+	vec3(-0.5, 0.0,  0.5),
+	vec3( 0.5, 0.0, -0.5),
+	vec3(-0.5, 0.0,  0.5), 
+	vec3( 0.5, 0.0,  0.5)
 };
 
 //----------------------------------------------------------------------------//
 
 layout(location = 0) out vec2 o_texPos;
 layout(location = 1) out vec4 o_color;
+layout(location = 2) out flat uint o_type;
 
 //----------------------------------------------------------------------------//
 
@@ -40,6 +41,7 @@ layout(binding = 0) uniform Camera
 layout(push_constant) uniform Params
 {
 	float u_time;
+	uint u_numStars;
 };
 
 layout(std140, binding = 1) readonly buffer Particles
@@ -284,19 +286,27 @@ vec3 color_from_temp(float temp)
 
 void main()
 {
-	vec3 a_pos    = VERTICES[gl_VertexIndex % NUM_VERTICES] * 0.5;
-	vec2 a_texPos = VERTICES[gl_VertexIndex % NUM_VERTICES].xz;
+	vec3 a_pos    = VERTICES[gl_VertexIndex % NUM_VERTICES];
+	vec2 a_texPos = VERTICES[gl_VertexIndex % NUM_VERTICES].xz + vec2(0.5);
+
+	Particle particle = particles[gl_VertexIndex / NUM_VERTICES];
+	uint type = (gl_VertexIndex / NUM_VERTICES) > u_numStars ? 1 : 0;
+
+	float scale;
+	if(type == 0)
+		scale = 10.0;
+	else
+		scale = 500.0;
 
 	vec3 camRight = vec3(u_view[0][0], u_view[1][0], u_view[2][0]);
 	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
-
-	Particle particle = particles[gl_VertexIndex / NUM_VERTICES];
 	vec2 pos = calc_pos(particle);
-	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * 10.0;
+	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * scale;
 
 	vec3 color = color_from_temp(particle.temp);
 
 	o_texPos = a_texPos;
 	o_color = vec4(color, particle.opacity);
+	o_type = type;
 	gl_Position = u_viewProj * vec4(worldspacePos, 1.0);
 }

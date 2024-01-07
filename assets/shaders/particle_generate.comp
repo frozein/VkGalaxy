@@ -30,16 +30,20 @@ float u_maxRad = 3500.0;
 float u_bulgeRad = 1250.0;
 
 float u_baseHeight = 300.0;
-float u_height = 100.0;
+float u_height = 250.0;
 
 float u_angleOffset = 2.0 * PI;
 float u_eccentricity = 0.85;
 
 float u_minTemp = 3000.0;
-float u_maxTemp = 7000.0;
+float u_maxTemp = 9000.0;
 
 float u_minOpacity = 0.1;
 float u_maxOpacity = 0.5;
+
+uint u_numStars = 75000;
+
+float u_speed = 10.0;
 
 //----------------------------------------------------------------------------//
 
@@ -57,12 +61,47 @@ void srand(float seed)
 
 //----------------------------------------------------------------------------//
 
-float rand_radius()
+float ease_in_exp(float x)
 {
-	float r = rand();
-	r = pow(2.0, 10.0 * r - 10.0); //basic quadratic easing
+	return x <= 0.0 ? 0.0 : pow(2, 10.0 * x - 10.0);
+}
 
-	return r * u_maxRad;
+float ease_in_circ(float x)
+{
+	return x >= 1.0 ? 1.0 : 1.0 - sqrt(1.0 - x * x);
+}
+
+//----------------------------------------------------------------------------//
+
+float rand_height()
+{
+	float r = ease_in_circ(rand());
+	if(rand() < 0.5)
+		r *= -1;
+
+	return u_baseHeight + (u_height * 0.5) * r; 
+}
+
+float rand_height_bulge(float rad)
+{
+	float r = ease_in_circ(rand());
+	if(rand() < 0.5)
+		r *= -1;
+
+	float bound = (u_height * 0.5) + (u_height * 0.5) * cos(PI * rad / u_bulgeRad);
+
+	return u_baseHeight + bound * r;
+}
+
+float rand_height_bulge_dust(float rad)
+{
+	float r = ease_in_circ(rand());
+	if(rand() < 0.5)
+		r *= -1;
+
+	float bound = (u_height * 0.5) * cos(PI * rad / u_bulgeRad);
+
+	return u_baseHeight + bound * r;
 }
 
 //----------------------------------------------------------------------------//
@@ -71,25 +110,43 @@ void main()
 {
 	srand(gl_GlobalInvocationID.x / 1024.0); //particles spawn on top of each other unless i divide by a constant
 
-	float rad = rand_radius();
-	float angle = rand() * 2.0 * PI;
-	float tiltAngle = (rad / u_maxRad) * u_angleOffset;
-	float angleVel = -10.0 * sqrt(1.0 / rad);
-
-	float height;
-	if(rad < u_bulgeRad)
-		height = u_baseHeight + (50.0 + 100.0 * cos(PI * rad / u_bulgeRad)) * (rand() * 2.0 - 1.0);
-	else
-		height = u_baseHeight + (u_height * 0.5) * (rand() * 2.0 - 1.0);
-
 	Particle particle;
-	particle.pos = vec2(rad, u_eccentricity * rad);
-	particle.height = height;
-	particle.angle = angle;
-	particle.tiltAngle = tiltAngle;
-	particle.angleVel = angleVel;
-	particle.opacity = u_minOpacity + (u_maxOpacity - u_minOpacity) * rand();
-	particle.temp = u_minTemp + (u_maxTemp - u_minTemp) * rand();
+	if(gl_GlobalInvocationID.x < u_numStars) //star
+	{
+		float rad = ease_in_exp(rand()) * u_maxRad;
+
+		particle.pos = vec2(rad, u_eccentricity * rad);
+		particle.angle = rand() * 2.0 * PI;
+		particle.tiltAngle = (rad / u_maxRad) * u_angleOffset;
+		particle.angleVel = -u_speed * sqrt(1.0 / rad);
+		particle.temp = u_minTemp + (u_maxTemp - u_minTemp) * rand();
+		particle.opacity = u_minOpacity + (u_maxOpacity - u_minOpacity) * rand();
+
+		if(rad < u_bulgeRad)
+			particle.height = rand_height_bulge(rad);
+		else
+			particle.height = rand_height();
+	}
+	else //dust
+	{
+		float rad;
+		if(gl_GlobalInvocationID.x % 2 == 0)
+			rad = rand() * u_maxRad;
+		else
+			rad = ease_in_exp(rand()) * u_maxRad;
+
+		particle.pos = vec2(rad, u_eccentricity * rad);
+		particle.angle = rand() * 2.0 * PI;
+		particle.tiltAngle = (rad / u_maxRad) * u_angleOffset;
+		particle.angleVel = -u_speed * sqrt(1.0 / rad);
+		particle.temp = 4000.0 + 2.0 * rad;
+		particle.opacity = 0.1 * (u_minOpacity + (u_maxOpacity - u_minOpacity) * rand());
+
+		if(rad < u_bulgeRad)
+			particle.height = rand_height_bulge_dust(rad);
+		else
+			particle.height = u_baseHeight;
+	}
 
 	particles[gl_GlobalInvocationID.x] = particle;
 }

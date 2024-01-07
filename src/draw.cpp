@@ -5,7 +5,7 @@
 
 //----------------------------------------------------------------------------//
 
-#define DRAW_NUM_PARTICLES 75008
+#define DRAW_NUM_PARTICLES 80128
 #define DRAW_PARTICLE_WORK_GROUP_SIZE 256
 
 //----------------------------------------------------------------------------//
@@ -37,6 +37,7 @@ struct GridParamsFragGPU
 struct ParticleParamsVertGPU
 {
 	f32 time;
+	uint32 numStars;
 };
 
 //----------------------------------------------------------------------------//
@@ -1053,7 +1054,7 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 
 	//send vertex stage params:
 	//---------------
-	ParticleParamsVertGPU vertParams = { (float)glfwGetTime() };
+	ParticleParamsVertGPU vertParams = { (float)glfwGetTime(), 75000 };
 	vkCmdPushConstants(commandBuffer, s->particlePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ParticleParamsVertGPU), &vertParams);
 
 	//draw:
