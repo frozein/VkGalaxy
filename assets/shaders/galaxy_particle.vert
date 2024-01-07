@@ -41,7 +41,14 @@ layout(binding = 0) uniform Camera
 layout(push_constant) uniform Params
 {
 	float u_time;
+
 	uint u_numStars;
+
+	float u_starSize;
+	float u_dustSize;
+	float u_h2Size;
+
+	float u_h2DistCheck;
 };
 
 layout(std140, binding = 1) readonly buffer Particles
@@ -303,24 +310,24 @@ void main()
 
 	float scale;
 	if(type == 0)
-		scale = 10.0;
+		scale = u_starSize;
 	else if(type == 1)
-		scale = 500.0;
+		scale = u_dustSize;
 	else
 	{
 		Particle distTest = particle;
-		distTest.pos.x += 300.0;
+		distTest.pos.x += u_h2DistCheck;
 
 		vec2 test = calc_pos(distTest);
 		vec2 test2 = calc_pos(particle);
 		float dist = distance(test, test2);
-		dist = ease_in_circ(dist / 300.0);
+		dist = ease_in_circ(dist / u_h2DistCheck);
 
-		scale = 150.0 * (1.0 - dist);
+		scale = u_h2Size * (1.0 - dist);
 	}
 
 	vec3 camRight = vec3(u_view[0][0], u_view[1][0], u_view[2][0]);
-	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
+	vec3 camUp    = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);
 	vec2 pos = calc_pos(particle);
 	vec3 worldspacePos = vec3(pos.x, particle.height, pos.y) + ((camRight * a_pos.x) + (camUp * a_pos.z)) * scale;
 

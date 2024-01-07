@@ -6,6 +6,8 @@
 //----------------------------------------------------------------------------//
 
 #define DRAW_NUM_PARTICLES 80128
+#define DRAW_NUM_STARS 75000
+
 #define DRAW_PARTICLE_WORK_GROUP_SIZE 256
 
 //----------------------------------------------------------------------------//
@@ -37,7 +39,40 @@ struct GridParamsFragGPU
 struct ParticleParamsVertGPU
 {
 	f32 time;
+
 	uint32 numStars;
+
+	f32 starSize;
+	f32 dustSize;
+	f32 h2Size;
+
+	f32 h2Dist;
+};
+
+struct ParticleGenParamsGPU
+{
+	uint32 numStars;
+
+	f32 maxRad;
+	f32 bulgeRad;
+
+	f32 angleOffset;
+	f32 eccentricity;
+
+	f32 baseHeight;
+	f32 height;
+
+	f32 minTemp;
+	f32 maxTemp;
+	f32 dustBaseTemp;
+
+	f32 minStarOpacity;
+	f32 maxStarOpacity;
+
+	f32 minDustOpacity;
+	f32 maxDustOpacity;
+
+	f32 speed;
 };
 
 //----------------------------------------------------------------------------//
@@ -907,6 +942,13 @@ static bool _draw_initialize_particles(DrawState* s)
 
 	vkh_compute_pipeline_add_desc_set_binding(pipeline, particleLayoutBinding);
 
+	VkPushConstantRange pushConstant = {};
+	pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	pushConstant.offset = 0;
+	pushConstant.size = sizeof(ParticleGenParamsGPU);
+
+	vkh_compute_pipeline_add_push_constant(pipeline, pushConstant);
+
 	if(!vkh_compute_pipeline_generate(pipeline, s->instance))
 		return false;
 
@@ -931,9 +973,27 @@ static bool _draw_initialize_particles(DrawState* s)
 	//---------------
 	VkCommandBuffer commandBuf = vkh_start_single_time_command(s->instance);
 
+	ParticleGenParamsGPU params;
+	params.numStars = DRAW_NUM_STARS;
+	params.maxRad = 3500.0f;
+	params.bulgeRad = 1250.0f;
+	params.angleOffset = 6.28f;
+	params.eccentricity = 0.85f;
+	params.baseHeight = 300.0f;
+	params.height = 250.0f;
+	params.minTemp = 3000.0f;
+	params.maxTemp = 9000.0f;
+	params.dustBaseTemp = 4000.0f;
+	params.minStarOpacity = 0.1f;
+	params.maxStarOpacity = 0.5f;
+	params.minDustOpacity = 0.01f;
+	params.maxDustOpacity = 0.05f;
+	params.speed = 10.0f;
+
 	uint32 dynamicOffset = 0;
 	vkCmdBindPipeline(commandBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 	vkCmdBindDescriptorSets(commandBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout, 0, 1, &descriptorSets->sets[0], 1, &dynamicOffset);
+	vkCmdPushConstants(commandBuf, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleGenParamsGPU), &params);
 	vkCmdDispatch(commandBuf, DRAW_NUM_PARTICLES / DRAW_PARTICLE_WORK_GROUP_SIZE, 1, 1);
 
 	vkh_end_single_time_command(s->instance, commandBuf);
@@ -1054,7 +1114,14 @@ static void _draw_record_particle_commands(DrawState* s, DrawParams* params, VkC
 
 	//send vertex stage params:
 	//---------------
-	ParticleParamsVertGPU vertParams = { (float)glfwGetTime(), 75000 };
+	ParticleParamsVertGPU vertParams;
+	vertParams.time = (float)glfwGetTime();
+	vertParams.numStars = DRAW_NUM_STARS;
+	vertParams.starSize = 10.0f;
+	vertParams.dustSize = 500.0f;
+	vertParams.h2Size = 150.0f;
+	vertParams.h2Dist = 300.0f;
+
 	vkCmdPushConstants(commandBuffer, s->particlePipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ParticleParamsVertGPU), &vertParams);
 
 	//draw:

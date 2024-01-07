@@ -27,29 +27,31 @@ layout(std140, binding = 0) buffer Particles
 
 //----------------------------------------------------------------------------//
 
-float u_maxRad = 3500.0;
-float u_bulgeRad = 1250.0;
+layout(push_constant) uniform Params
+{
+	uint u_numStars;
 
-float u_baseHeight = 300.0;
-float u_height = 250.0;
+	float u_maxRad;
+	float u_bulgeRad;
 
-float u_angleOffset = 2.0 * PI;
-float u_eccentricity = 0.85;
+	float u_angleOffset;
+	float u_eccentricity;
 
-float u_minTemp = 3000.0;
-float u_maxTemp = 9000.0;
+	float u_baseHeight;
+	float u_height;
 
-float u_minStarOpacity = 0.1;
-float u_maxStarOpacity = 0.5;
+	float u_minTemp;
+	float u_maxTemp;
+	float u_dustBaseTemp;
 
-float u_minDustOpacity = 0.01;
-float u_maxDustOpacity = 0.05;
+	float u_minStarOpacity;
+	float u_maxStarOpacity;
 
-uint u_numStars = 75000;
+	float u_minDustOpacity;
+	float u_maxDustOpacity;
 
-float u_speed = 10.0;
-
-float u_dustBaseTemp = 4000.0;
+	float u_speed;
+};
 
 //----------------------------------------------------------------------------//
 
@@ -156,12 +158,6 @@ void main()
 			particle.height = rand_height_bulge(rad);
 		else
 			particle.height = rand_height();
-
-		if(gl_GlobalInvocationID.x % 150 == 0) //h-2 region
-		{
-			particle.temp = 1000.0;
-			particle.opacity = 1.0;
-		}
 	}
 	else //dust
 	{

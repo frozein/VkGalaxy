@@ -30,7 +30,7 @@ void main()
 		float dist = max(1.0 - length(centeredPos), 0.0);
 
 		color.rgb = mix(vec3(1.0, 0.0, 0.0), vec3(1.0), dist * dist * dist);
-		color.a *= dist * dist;
+		color.a = dist * dist;
 	}
 
 	o_color = color;
