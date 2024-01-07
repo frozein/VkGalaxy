@@ -57,10 +57,10 @@ RM = /home/linuxbrew/.linuxbrew/Cellar/cmake/3.27.4/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/daniel/dev/VulkanCraft
+CMAKE_SOURCE_DIR = /home/daniel/dev/VkGalaxy
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/daniel/dev/VulkanCraft
+CMAKE_BINARY_DIR = /home/daniel/dev/VkGalaxy
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/daniel/dev/VulkanCraft/CMakeFiles /home/daniel/dev/VulkanCraft//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/daniel/dev/VkGalaxy/CMakeFiles /home/daniel/dev/VkGalaxy//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/daniel/dev/VulkanCraft/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/daniel/dev/VkGalaxy/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -113,7 +113,7 @@ preinstall/fast:
 
 # clear depends
 depend:
-	$(CMAKE_COMMAND) -P /home/daniel/dev/VulkanCraft/CMakeFiles/VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -P /home/daniel/dev/VkGalaxy/CMakeFiles/VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
@@ -191,29 +191,29 @@ src/game.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.s
 .PHONY : src/game.cpp.s
 
-src/libs/render.o: src/libs/render.cpp.o
-.PHONY : src/libs/render.o
+src/libs/vkh/vkh.o: src/libs/vkh/vkh.c.o
+.PHONY : src/libs/vkh/vkh.o
 
 # target to build an object file
-src/libs/render.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.o
-.PHONY : src/libs/render.cpp.o
+src/libs/vkh/vkh.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.o
+.PHONY : src/libs/vkh/vkh.c.o
 
-src/libs/render.i: src/libs/render.cpp.i
-.PHONY : src/libs/render.i
+src/libs/vkh/vkh.i: src/libs/vkh/vkh.c.i
+.PHONY : src/libs/vkh/vkh.i
 
 # target to preprocess a source file
-src/libs/render.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.i
-.PHONY : src/libs/render.cpp.i
+src/libs/vkh/vkh.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.i
+.PHONY : src/libs/vkh/vkh.c.i
 
-src/libs/render.s: src/libs/render.cpp.s
-.PHONY : src/libs/render.s
+src/libs/vkh/vkh.s: src/libs/vkh/vkh.c.s
+.PHONY : src/libs/vkh/vkh.s
 
 # target to generate assembly for a file
-src/libs/render.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/render.cpp.s
-.PHONY : src/libs/render.cpp.s
+src/libs/vkh/vkh.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.s
+.PHONY : src/libs/vkh/vkh.c.s
 
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
@@ -255,9 +255,9 @@ help:
 	@echo "... src/game.o"
 	@echo "... src/game.i"
 	@echo "... src/game.s"
-	@echo "... src/libs/render.o"
-	@echo "... src/libs/render.i"
-	@echo "... src/libs/render.s"
+	@echo "... src/libs/vkh/vkh.o"
+	@echo "... src/libs/vkh/vkh.i"
+	@echo "... src/libs/vkh/vkh.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
@@ -272,7 +272,7 @@ help:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
-	$(CMAKE_COMMAND) -P /home/daniel/dev/VulkanCraft/CMakeFiles/VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -P /home/daniel/dev/VkGalaxy/CMakeFiles/VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
 .PHONY : cmake_check_build_system
 

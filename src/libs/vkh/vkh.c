@@ -1232,7 +1232,7 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
 	instanceInfo.enabledExtensionCount = requiredExtensionCount;
-	instanceInfo.ppEnabledExtensionNames = requiredExtensions;
+	instanceInfo.ppEnabledExtensionNames = (const char* const*)requiredExtensions;
 	instanceInfo.enabledLayerCount = requiredLayerCount;
 	instanceInfo.ppEnabledLayerNames = requiredLayers;
 
