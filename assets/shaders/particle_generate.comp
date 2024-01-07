@@ -2,6 +2,7 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
+//theres no way floating point allows this much precision lol
 #define PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062
 
 //----------------------------------------------------------------------------//
@@ -53,6 +54,7 @@ float u_dustBaseTemp = 4000.0;
 //----------------------------------------------------------------------------//
 
 //source: http://www.gamedev.net/topic/592001-random-number-generation-based-on-time-in-hlsl/
+//(says it is from the NVidia Direct3D 10 SDK but i could not find the SDK download to verify)
 
 #define RANDOM_IA 16807
 #define RANDOM_IM 2147483647
@@ -154,6 +156,12 @@ void main()
 			particle.height = rand_height_bulge(rad);
 		else
 			particle.height = rand_height();
+
+		if(gl_GlobalInvocationID.x % 150 == 0) //h-2 region
+		{
+			particle.temp = 1000.0;
+			particle.opacity = 1.0;
+		}
 	}
 	else //dust
 	{

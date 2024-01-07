@@ -51,6 +51,13 @@ layout(std140, binding = 1) readonly buffer Particles
 
 //----------------------------------------------------------------------------//
 
+float ease_in_circ(float x)
+{
+	return x >= 1.0 ? 1.0 : 1.0 - sqrt(1.0 - x * x);
+}
+
+//----------------------------------------------------------------------------//
+
 vec2 calc_pos(Particle particle)
 {
 	float angle = particle.angle + particle.angleVel * u_time;
@@ -291,12 +298,26 @@ void main()
 
 	Particle particle = particles[gl_VertexIndex / NUM_VERTICES];
 	uint type = (gl_VertexIndex / NUM_VERTICES) > u_numStars ? 1 : 0;
+	if(type == 0 && gl_VertexIndex / NUM_VERTICES % 150 == 0)
+		type = 2;
 
 	float scale;
 	if(type == 0)
 		scale = 10.0;
-	else
+	else if(type == 1)
 		scale = 500.0;
+	else
+	{
+		Particle distTest = particle;
+		distTest.pos.x += 300.0;
+
+		vec2 test = calc_pos(distTest);
+		vec2 test2 = calc_pos(particle);
+		float dist = distance(test, test2);
+		dist = ease_in_circ(dist / 300.0);
+
+		scale = 150.0 * (1.0 - dist);
+	}
 
 	vec3 camRight = vec3(u_view[0][0], u_view[1][0], u_view[2][0]);
 	vec3 camUp = vec3(u_view[0][1], u_view[1][1], u_view[2][1]);

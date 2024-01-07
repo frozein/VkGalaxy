@@ -7,7 +7,7 @@
 int main()
 {
 	GameState* state;
-	if(!game_init(&state))
+	if (!game_init(&state))
 		return -1;
 
 	game_main_loop(state);
