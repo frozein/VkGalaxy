@@ -6,6 +6,7 @@
 #define CAMERA_MAX_DIST 8000.0f
 #define CAMERA_MIN_TILT 15.0f
 #define CAMERA_MAX_TILT 89.0f
+#define CAMERA_MAX_POSITION 7000.0f
 
 //----------------------------------------------------------------------------//
 
@@ -168,6 +169,8 @@ void _game_camera_update(GameCamera* cam, f32 dt, GLFWwindow* window)
 		cam->targetTilt = fmaxf(cam->targetTilt - tiltSpeed, CAMERA_MIN_TILT);
 
 	cam->targetCenter = cam->targetCenter + camSpeed * qm::normalize(camVel);
+	if(qm::length(cam->targetCenter) > CAMERA_MAX_POSITION)
+		cam->targetCenter = qm::normalize(cam->targetCenter) * CAMERA_MAX_POSITION;
 
 	_game_decay_to(cam->center, cam->targetCenter, 0.985f, dt);
 	_game_decay_to(cam->dist  , cam->targetDist  , 0.99f , dt);
