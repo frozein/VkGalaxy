@@ -774,8 +774,8 @@ static bool _draw_create_particle_pipeline(DrawState* s)
 	//set shaders:
 	//---------------
 	uint64 vertCodeSize, fragCodeSize;
-	uint32 *vertCode = vkh_load_spirv("assets/spirv/galaxy_particle.vert.spv", &vertCodeSize);
-	uint32 *fragCode = vkh_load_spirv("assets/spirv/galaxy_particle.frag.spv", &fragCodeSize);
+	uint32 *vertCode = vkh_load_spirv("assets/spirv/particle.vert.spv", &vertCodeSize);
+	uint32 *fragCode = vkh_load_spirv("assets/spirv/particle.frag.spv", &fragCodeSize);
 
 	VkShaderModule vertModule = vkh_create_shader_module(s->instance, vertCodeSize, vertCode);
 	VkShaderModule fragModule = vkh_create_shader_module(s->instance, fragCodeSize, fragCode);

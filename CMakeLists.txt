@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 cmake_policy(SET CMP0091 NEW)
-project(vulkancraft VERSION 1.0)
+project(vkgalaxy VERSION 1.0)
 
 # add fsanitize
 if(NOT WIN32)
@@ -16,8 +16,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # find source files:
-file(GLOB_RECURSE vulkancraft_src CONFIGURE_DEPENDS "src/*.cpp" "src/*.c")
-add_executable(${PROJECT_NAME} ${vulkancraft_src})
+file(GLOB_RECURSE vkgalaxy_src CONFIGURE_DEPENDS "src/*.cpp" "src/*.c")
+add_executable(${PROJECT_NAME} ${vkgalaxy_src})
 
 # find include diretories and libraries
 if(WIN32)
@@ -41,10 +41,10 @@ else()
 endif()
 
 # compile shaders:
-file(GLOB_RECURSE vulkancraft_shader_src CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/shaders/*")
+file(GLOB_RECURSE vkgalaxy_shader_src CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/shaders/*")
 
 if(WIN32)
-    add_custom_target(vulkancraft_shaders ALL DEPENDS ${vulkancraft_shader_src} COMMAND "${CMAKE_SOURCE_DIR}/shader_compile.bat")
+    add_custom_target(vkgalaxy_shaders ALL DEPENDS ${vkgalaxy_shader_src} COMMAND "${CMAKE_SOURCE_DIR}/shader_compile.bat")
 else()
-    add_custom_target(vulkancraft_shaders ALL DEPENDS ${vulkancraft_shader_src} COMMAND sh shader_compile.sh)
+    add_custom_target(vkgalaxy_shaders ALL DEPENDS ${vkgalaxy_shader_src} COMMAND sh shader_compile.sh)
 endif()
