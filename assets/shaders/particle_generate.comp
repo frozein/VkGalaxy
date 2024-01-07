@@ -38,25 +38,53 @@ float u_eccentricity = 0.85;
 float u_minTemp = 3000.0;
 float u_maxTemp = 9000.0;
 
-float u_minOpacity = 0.1;
-float u_maxOpacity = 0.5;
+float u_minStarOpacity = 0.1;
+float u_maxStarOpacity = 0.5;
+
+float u_minDustOpacity = 0.01;
+float u_maxDustOpacity = 0.05;
 
 uint u_numStars = 75000;
 
 float u_speed = 10.0;
 
+float u_dustBaseTemp = 4000.0;
+
 //----------------------------------------------------------------------------//
 
-float _SEED = 0.0;
+//source: http://www.gamedev.net/topic/592001-random-number-generation-based-on-time-in-hlsl/
+
+#define RANDOM_IA 16807
+#define RANDOM_IM 2147483647
+#define RANDOM_AM 1.0 / float(RANDOM_IM)
+#define RANDOM_IQ 127773
+#define RANDOM_IR 2836
+#define RANDOM_MASK 123459876
+
+int _SEED = 0;
+
+void srand_cycle()
+{
+	_SEED ^= RANDOM_MASK;
+	int k = _SEED / RANDOM_IQ;
+	_SEED = RANDOM_IA * (_SEED - k * RANDOM_IQ) - RANDOM_IR * k;
+
+	if (_SEED < 0)
+		_SEED += RANDOM_IM;
+
+	_SEED ^= RANDOM_MASK;
+}
+
+void srand_set(int seed)
+{
+	_SEED = seed;
+	srand_cycle();
+}
 
 float rand()
 {
-    return fract(sin(_SEED++) * 43758.5453);
-}
-
-void srand(float seed)
-{
-	_SEED = seed;
+	srand_cycle();
+	return RANDOM_AM * _SEED;
 }
 
 //----------------------------------------------------------------------------//
@@ -108,7 +136,7 @@ float rand_height_bulge_dust(float rad)
 
 void main()
 {
-	srand(gl_GlobalInvocationID.x / 1024.0); //particles spawn on top of each other unless i divide by a constant
+	srand_set(int(gl_GlobalInvocationID.x));
 
 	Particle particle;
 	if(gl_GlobalInvocationID.x < u_numStars) //star
@@ -120,7 +148,7 @@ void main()
 		particle.tiltAngle = (rad / u_maxRad) * u_angleOffset;
 		particle.angleVel = -u_speed * sqrt(1.0 / rad);
 		particle.temp = u_minTemp + (u_maxTemp - u_minTemp) * rand();
-		particle.opacity = u_minOpacity + (u_maxOpacity - u_minOpacity) * rand();
+		particle.opacity = u_minStarOpacity + (u_maxStarOpacity - u_minStarOpacity) * rand();
 
 		if(rad < u_bulgeRad)
 			particle.height = rand_height_bulge(rad);
@@ -139,8 +167,8 @@ void main()
 		particle.angle = rand() * 2.0 * PI;
 		particle.tiltAngle = (rad / u_maxRad) * u_angleOffset;
 		particle.angleVel = -u_speed * sqrt(1.0 / rad);
-		particle.temp = 4000.0 + 2.0 * rad;
-		particle.opacity = 0.1 * (u_minOpacity + (u_maxOpacity - u_minOpacity) * rand());
+		particle.temp = u_dustBaseTemp + 2.0 * rad;
+		particle.opacity = u_minDustOpacity + (u_maxDustOpacity - u_minDustOpacity) * rand();
 
 		if(rad < u_bulgeRad)
 			particle.height = rand_height_bulge_dust(rad);

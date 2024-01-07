@@ -67,12 +67,12 @@ struct Vertex
 struct GalaxyParticle
 {
 	qm::vec2 pos;
-	float height;
-	float angle;
-	float tiltAngle;
-	float angleVel;
-
-	float padding1, padding2;
+	f32 height;
+	f32 angle;
+	f32 tiltAngle;
+	f32 angleVel;
+	f32 opacity;
+	f32 temp;
 };
 
 //----------------------------------------------------------------------------//
