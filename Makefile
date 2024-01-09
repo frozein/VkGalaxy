@@ -118,37 +118,37 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named vulkancraft
+# Target rules for targets named vkgalaxy
 
 # Build rule for target.
-vulkancraft: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vulkancraft
-.PHONY : vulkancraft
+vkgalaxy: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vkgalaxy
+.PHONY : vkgalaxy
 
 # fast build rule for target.
-vulkancraft/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/build
-.PHONY : vulkancraft/fast
+vkgalaxy/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/build
+.PHONY : vkgalaxy/fast
 
 #=============================================================================
-# Target rules for targets named vulkancraft_shaders
+# Target rules for targets named vkgalaxy_shaders
 
 # Build rule for target.
-vulkancraft_shaders: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vulkancraft_shaders
-.PHONY : vulkancraft_shaders
+vkgalaxy_shaders: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vkgalaxy_shaders
+.PHONY : vkgalaxy_shaders
 
 # fast build rule for target.
-vulkancraft_shaders/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft_shaders.dir/build.make CMakeFiles/vulkancraft_shaders.dir/build
-.PHONY : vulkancraft_shaders/fast
+vkgalaxy_shaders/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy_shaders.dir/build.make CMakeFiles/vkgalaxy_shaders.dir/build
+.PHONY : vkgalaxy_shaders/fast
 
 src/draw.o: src/draw.cpp.o
 .PHONY : src/draw.o
 
 # target to build an object file
 src/draw.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/draw.cpp.o
 .PHONY : src/draw.cpp.o
 
 src/draw.i: src/draw.cpp.i
@@ -156,7 +156,7 @@ src/draw.i: src/draw.cpp.i
 
 # target to preprocess a source file
 src/draw.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/draw.cpp.i
 .PHONY : src/draw.cpp.i
 
 src/draw.s: src/draw.cpp.s
@@ -164,7 +164,7 @@ src/draw.s: src/draw.cpp.s
 
 # target to generate assembly for a file
 src/draw.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/draw.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/draw.cpp.s
 .PHONY : src/draw.cpp.s
 
 src/game.o: src/game.cpp.o
@@ -172,7 +172,7 @@ src/game.o: src/game.cpp.o
 
 # target to build an object file
 src/game.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/game.cpp.o
 .PHONY : src/game.cpp.o
 
 src/game.i: src/game.cpp.i
@@ -180,7 +180,7 @@ src/game.i: src/game.cpp.i
 
 # target to preprocess a source file
 src/game.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/game.cpp.i
 .PHONY : src/game.cpp.i
 
 src/game.s: src/game.cpp.s
@@ -188,7 +188,7 @@ src/game.s: src/game.cpp.s
 
 # target to generate assembly for a file
 src/game.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/game.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/game.cpp.s
 .PHONY : src/game.cpp.s
 
 src/libs/vkh/vkh.o: src/libs/vkh/vkh.c.o
@@ -196,7 +196,7 @@ src/libs/vkh/vkh.o: src/libs/vkh/vkh.c.o
 
 # target to build an object file
 src/libs/vkh/vkh.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/libs/vkh/vkh.c.o
 .PHONY : src/libs/vkh/vkh.c.o
 
 src/libs/vkh/vkh.i: src/libs/vkh/vkh.c.i
@@ -204,7 +204,7 @@ src/libs/vkh/vkh.i: src/libs/vkh/vkh.c.i
 
 # target to preprocess a source file
 src/libs/vkh/vkh.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/libs/vkh/vkh.c.i
 .PHONY : src/libs/vkh/vkh.c.i
 
 src/libs/vkh/vkh.s: src/libs/vkh/vkh.c.s
@@ -212,7 +212,7 @@ src/libs/vkh/vkh.s: src/libs/vkh/vkh.c.s
 
 # target to generate assembly for a file
 src/libs/vkh/vkh.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/libs/vkh/vkh.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/libs/vkh/vkh.c.s
 .PHONY : src/libs/vkh/vkh.c.s
 
 src/main.o: src/main.cpp.o
@@ -220,7 +220,7 @@ src/main.o: src/main.cpp.o
 
 # target to build an object file
 src/main.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/main.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/main.cpp.o
 .PHONY : src/main.cpp.o
 
 src/main.i: src/main.cpp.i
@@ -228,7 +228,7 @@ src/main.i: src/main.cpp.i
 
 # target to preprocess a source file
 src/main.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/main.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/main.cpp.i
 .PHONY : src/main.cpp.i
 
 src/main.s: src/main.cpp.s
@@ -236,7 +236,7 @@ src/main.s: src/main.cpp.s
 
 # target to generate assembly for a file
 src/main.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/vulkancraft.dir/build.make CMakeFiles/vulkancraft.dir/src/main.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vkgalaxy.dir/build.make CMakeFiles/vkgalaxy.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
 # Help Target
@@ -247,8 +247,8 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... vulkancraft_shaders"
-	@echo "... vulkancraft"
+	@echo "... vkgalaxy_shaders"
+	@echo "... vkgalaxy"
 	@echo "... src/draw.o"
 	@echo "... src/draw.i"
 	@echo "... src/draw.s"
