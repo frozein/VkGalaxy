@@ -1,5 +1,5 @@
 # VkGalaxy
-A simple galaxy renderer/simulation written in C/C++ with Vulkan. This project was simply for me to learn vulkan, my process is documented in this video: (LINK). 
+A simple galaxy renderer/simulation written in C/C++ with Vulkan. This project was simply for me to learn vulkan, my process is documented in this video: https://youtu.be/Pj1P0zV4zDI 
 
 The galaxy simulation is based off of this article: https://beltoforion.de/en/spiral_galaxy_renderer/?a=spiral_galaxy_renderer
 
