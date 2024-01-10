@@ -5,6 +5,7 @@ The galaxy simulation is based off of this article: https://beltoforion.de/en/sp
 
 ## Building
 This project has the following dependencies:
+- `CMake`
 - `GLFW`
 - The `VulkanSDK` (from [LunarG](https://www.lunarg.com/vulkan-sdk/))
 
