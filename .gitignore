@@ -23,3 +23,6 @@ x32/
 [Dd]ebug/
 [Rr]elease/
 .vs/
+
+# macos
+.DS_Store
