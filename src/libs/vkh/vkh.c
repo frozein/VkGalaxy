@@ -1153,6 +1153,10 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
     requiredExtensionCount++;
 #endif
 
+    #if VKH_VALIDATION_LAYERS
+    requiredExtensionCount++;
+    #endif
+
     char** requiredExtensions = (char**)malloc(requiredExtensionCount * sizeof(char*));
     memcpy(requiredExtensions, requiredGlfwExtensions, requiredExtensionCount * sizeof(char*));
 
@@ -1160,6 +1164,11 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
     //---------------
 #if __APPLE__
     requiredExtensions[requiredExtensionCount - 1] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+    #if VKH_VALIDATION_LAYERS
+    requiredExtensions[requiredExtensionCount - 2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    #endif
+#else
+    requiredExtensions[requiredExtensionCount - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 #endif
 
 	//check if glfw extensions are supported:
