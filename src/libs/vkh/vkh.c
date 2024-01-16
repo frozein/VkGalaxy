@@ -1139,25 +1139,28 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 	//get required GLFW extensions:
 	//---------------
 	uint32_t requiredExtensionCount;
-	char** requiredExtensions = (char**)glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
-	if(!requiredExtensions)
+	char** requiredGlfwExtensions = (char**)glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
+	if(!requiredGlfwExtensions)
 	{
 		ERROR_LOG("Vulkan rendering not supported on this machine");
 		return VKH_FALSE;
 	}
 	vkh_bool_t freeExtensionList = VKH_FALSE;
 
-	#if VKH_VALIDATION_LAYERS
-	{
-		char** requiredExtensionsValidation = (char**)malloc((requiredExtensionCount + 1) * sizeof(char*));
-		memcpy(requiredExtensionsValidation, requiredExtensions, requiredExtensionCount * sizeof(char*));
-		requiredExtensionsValidation[requiredExtensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    //reserve space for portability extension
+    //---------------
+#if __APPLE__
+    requiredExtensionCount++;
+#endif
 
-		requiredExtensionCount++;
-		requiredExtensions = requiredExtensionsValidation;
-		freeExtensionList = VKH_TRUE;
-	}
-	#endif
+    char** requiredExtensions = (char**)malloc(requiredExtensionCount * sizeof(char*));
+    memcpy(requiredExtensions, requiredGlfwExtensions, requiredExtensionCount * sizeof(char*));
+
+    //set portability extension
+    //---------------
+#if __APPLE__
+    requiredExtensions[requiredExtensionCount - 1] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+#endif
 
 	//check if glfw extensions are supported:
 	//---------------
@@ -1235,6 +1238,11 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 	VkInstanceCreateInfo instanceInfo = {0};
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
+
+#if __APPLE__
+    instanceInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+
 	instanceInfo.enabledExtensionCount = requiredExtensionCount;
 	instanceInfo.ppEnabledExtensionNames = (const char* const*)requiredExtensions;
 	instanceInfo.enabledLayerCount = requiredLayerCount;

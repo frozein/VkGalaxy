@@ -12,7 +12,7 @@ extern "C"
 
 #include "./quickdata.h"
 
-#define VKH_VALIDATION_LAYERS 1
+#define VKH_VALIDATION_LAYERS 0
 
 //----------------------------------------------------------------------------//
 
