@@ -1,7 +1,11 @@
 #include "vkh.h"
 
 #include <stdio.h>
+#ifdef __APPLE__
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
 #include <string.h>
 
 //----------------------------------------------------------------------------//
@@ -57,8 +61,19 @@ static void _vkh_error_log(const char* message, const char* file, int32_t line);
 	const char* REQUIRED_LAYERS[REQUIRED_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-#define REQUIRED_DEVICE_EXTENSION_COUNT 2
-const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
+#if __APPLE__
+    #define REQUIRED_DEVICE_EXTENSION_COUNT 3
+#else
+    #define REQUIRED_DEVICE_EXTENSION_COUNT 2
+#endif
+
+const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+#if __APPLE__
+    "VK_KHR_portability_subset"
+#endif
+};
 
 //----------------------------------------------------------------------------//
 
@@ -1135,25 +1150,38 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 	//get required GLFW extensions:
 	//---------------
 	uint32_t requiredExtensionCount;
-	char** requiredExtensions = (char**)glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
-	if(!requiredExtensions)
+	char** requiredGlfwExtensions = (char**)glfwGetRequiredInstanceExtensions(&requiredExtensionCount);
+	if(!requiredGlfwExtensions)
 	{
 		ERROR_LOG("Vulkan rendering not supported on this machine");
 		return VKH_FALSE;
 	}
 	vkh_bool_t freeExtensionList = VKH_FALSE;
 
-	#if VKH_VALIDATION_LAYERS
-	{
-		char** requiredExtensionsValidation = (char**)malloc((requiredExtensionCount + 1) * sizeof(char*));
-		memcpy(requiredExtensionsValidation, requiredExtensions, requiredExtensionCount * sizeof(char*));
-		requiredExtensionsValidation[requiredExtensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    //reserve space for portability extension
+    //---------------
+#if __APPLE__
+    requiredExtensionCount += 2;
+#endif
 
-		requiredExtensionCount++;
-		requiredExtensions = requiredExtensionsValidation;
-		freeExtensionList = VKH_TRUE;
-	}
-	#endif
+    #if VKH_VALIDATION_LAYERS
+    requiredExtensionCount++;
+    #endif
+
+    char** requiredExtensions = (char**)malloc(requiredExtensionCount * sizeof(char*));
+    memcpy(requiredExtensions, requiredGlfwExtensions, requiredExtensionCount * sizeof(char*));
+
+    //set portability extension
+    //---------------
+#if __APPLE__
+    requiredExtensions[requiredExtensionCount - 1] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+    requiredExtensions[requiredExtensionCount - 2] = "VK_KHR_get_physical_device_properties2";
+    #if VKH_VALIDATION_LAYERS
+    requiredExtensions[requiredExtensionCount - 3] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    #endif
+#else
+    requiredExtensions[requiredExtensionCount - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+#endif
 
 	//check if glfw extensions are supported:
 	//---------------
@@ -1231,6 +1259,11 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
 	VkInstanceCreateInfo instanceInfo = {0};
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
+
+#if __APPLE__
+    instanceInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+
 	instanceInfo.enabledExtensionCount = requiredExtensionCount;
 	instanceInfo.ppEnabledExtensionNames = (const char* const*)requiredExtensions;
 	instanceInfo.enabledLayerCount = requiredLayerCount;
