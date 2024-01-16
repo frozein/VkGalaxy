@@ -61,8 +61,19 @@ static void _vkh_error_log(const char* message, const char* file, int32_t line);
 	const char* REQUIRED_LAYERS[REQUIRED_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-#define REQUIRED_DEVICE_EXTENSION_COUNT 2
-const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
+#if __APPLE__
+    #define REQUIRED_DEVICE_EXTENSION_COUNT 3
+#else
+    #define REQUIRED_DEVICE_EXTENSION_COUNT 2
+#endif
+
+const char* REQUIRED_DEVICE_EXTENSIONS[REQUIRED_DEVICE_EXTENSION_COUNT] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+#if __APPLE__
+    "VK_KHR_portability_subset"
+#endif
+};
 
 //----------------------------------------------------------------------------//
 
@@ -1150,7 +1161,7 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
     //reserve space for portability extension
     //---------------
 #if __APPLE__
-    requiredExtensionCount++;
+    requiredExtensionCount += 2;
 #endif
 
     #if VKH_VALIDATION_LAYERS
@@ -1164,8 +1175,9 @@ static vkh_bool_t _vkh_create_vk_instance(VKHinstance* inst, const char* name)
     //---------------
 #if __APPLE__
     requiredExtensions[requiredExtensionCount - 1] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+    requiredExtensions[requiredExtensionCount - 2] = "VK_KHR_get_physical_device_properties2";
     #if VKH_VALIDATION_LAYERS
-    requiredExtensions[requiredExtensionCount - 2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    requiredExtensions[requiredExtensionCount - 3] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     #endif
 #else
     requiredExtensions[requiredExtensionCount - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
