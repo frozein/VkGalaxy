@@ -46,5 +46,5 @@ file(GLOB_RECURSE vkgalaxy_shader_src CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/ass
 if(WIN32)
     add_custom_target(vkgalaxy_shaders ALL DEPENDS ${vkgalaxy_shader_src} COMMAND "${CMAKE_SOURCE_DIR}/shader_compile.bat")
 else()
-    add_custom_target(vkgalaxy_shaders ALL DEPENDS ${vkgalaxy_shader_src} COMMAND sh shader_compile.sh)
+    add_custom_target(vkgalaxy_shaders ALL DEPENDS ${vkgalaxy_shader_src} COMMAND sh "${CMAKE_SOURCE_DIR}/shader_compile.sh")
 endif()
